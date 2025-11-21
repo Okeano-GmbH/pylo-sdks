@@ -1,6 +1,6 @@
 {
   "name": "@okeano-gmbh/pylo-utils",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,5 +22,8 @@
   "devDependencies": {
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "graphql-request": "^7.3.4"
   }
 }
