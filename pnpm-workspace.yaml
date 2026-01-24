@@ -1,0 +1,4 @@
+packages:
+  - "auth"
+  - "auth-nextjs"
+  - "node-utils"

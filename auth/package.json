@@ -1,0 +1,30 @@
+{
+  "name": "@pylo/auth",
+  "version": "0.0.1",
+  "description": "Core authentication utilities for Pylo",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm --out-dir dist",
+    "watch": "tsc -w"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "pylo",
+    "auth",
+    "authentication"
+  ],
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.1",
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
