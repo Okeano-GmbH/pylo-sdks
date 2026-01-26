@@ -9,9 +9,6 @@
     "build": "tsup src/index.ts --dts --format esm --out-dir dist",
     "watch": "tsc -w"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "files": [
     "dist"
   ],
