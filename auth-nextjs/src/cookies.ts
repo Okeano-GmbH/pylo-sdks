@@ -1,6 +1,6 @@
 import { cookies } from "next/headers.js";
 import { NextResponse } from "next/server.js";
-import type { CookieOptions } from "@okeano-gmbh/pylo-auth";
+import type { CookieOptions } from "@pylo/auth";
 
 // Cookie names with pylo prefix
 const AUTH_TOKEN_COOKIE = "pylo_auth_token";

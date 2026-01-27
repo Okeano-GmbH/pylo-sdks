@@ -7,7 +7,7 @@ import {
   REFRESH_TOKEN_MUTATION,
   type RefreshTokenResponse,
   type PyloUser,
-} from "@okeano-gmbh/pylo-auth";
+} from "@pylo/auth";
 import type { PyloAuthOptions, AuthContext } from "./types.js";
 import {
   setAuthCookiesOnResponse,

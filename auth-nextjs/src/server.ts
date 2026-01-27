@@ -13,7 +13,7 @@ import {
   type LoginResponse,
   type RefreshTokenResponse,
   type MeResponse,
-} from "@okeano-gmbh/pylo-auth";
+} from "@pylo/auth";
 import type { RequireAuthOptions } from "./types.js";
 import { getAuthToken, getRefreshToken, setAuthCookies, clearAuthCookies } from "./cookies.js";
 

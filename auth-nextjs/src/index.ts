@@ -1,5 +1,5 @@
 // Re-export everything from core auth package
-export * from "@okeano-gmbh/pylo-auth";
+export * from "@pylo/auth";
 
 // Export Next.js specific types
 export type {

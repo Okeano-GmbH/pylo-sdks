@@ -1,6 +1,6 @@
 {
   "name": "@pylo/auth-nextjs",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Next.js authentication utilities for Pylo",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,8 @@
   },
   "scripts": {
     "build": "tsup src/index.ts src/core.ts --dts --format esm --out-dir dist",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "prepublishOnly": "pnpm run build"
   },
   "files": [
     "dist"

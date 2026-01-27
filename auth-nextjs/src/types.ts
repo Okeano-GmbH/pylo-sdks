@@ -1,5 +1,5 @@
 import type { NextResponse, NextRequest } from "next/server.js";
-import type { PyloUser, CookieOptions } from "@okeano-gmbh/pylo-auth";
+import type { PyloUser, CookieOptions } from "@pylo/auth";
 
 /**
  * Options for the pyloAuth middleware helper
