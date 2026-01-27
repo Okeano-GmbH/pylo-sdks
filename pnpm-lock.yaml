@@ -20,9 +20,9 @@ importers:
 
   auth-nextjs:
     dependencies:
-      '@okeano-gmbh/pylo-auth':
-        specifier: workspace:*
-        version: link:../auth
+      '@pylo/auth':
+        specifier: ^0.0.1
+        version: 0.0.1
     devDependencies:
       '@types/node':
         specifier: ^22.15.21
@@ -30,25 +30,6 @@ importers:
       next:
         specifier: ^16.0.0
         version: 16.1.4(react-dom@19.2.3(react@18.3.1))(react@18.3.1)
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(postcss@8.4.31)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  auth-react:
-    dependencies:
-      '@okeano-gmbh/pylo-auth':
-        specifier: workspace:*
-        version: link:../auth
-    devDependencies:
-      '@types/react':
-        specifier: ^18.0.0
-        version: 18.3.27
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.4.31)(typescript@5.9.3)
@@ -436,6 +417,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@pylo/auth@0.0.1':
+    resolution: {integrity: sha512-G8z4Q4cXGj+f4/vmdEf2+HCo1waCypG4ClybUy8n4jUS+KtmXwKHwmmr74cbruHgaqoh5hOG+U1VU97N03HGwQ==}
+
   '@rollup/rollup-android-arm-eabi@4.56.0':
     resolution: {integrity: sha512-LNKIPA5k8PF1+jAFomGe3qN3bbIgJe/IlpDBwuVjrDKrJhVWywgnJvflMt/zkbVNLFtF1+94SljYQS6e99klnw==}
     cpu: [arm]
@@ -570,12 +554,6 @@ packages:
   '@types/node@22.19.7':
     resolution: {integrity: sha512-MciR4AKGHWl7xwxkBa6xUGxQJ4VBOmPTF7sL+iGzuahOFaO0jHCsuEfS80pan1ef4gWId1oWOweIhrDEYLuaOw==}
 
-  '@types/prop-types@15.7.15':
-    resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
-
-  '@types/react@18.3.27':
-    resolution: {integrity: sha512-cisd7gxkzjBKU2GgdYrTdtQx1SORymWyaAFhaxQPK9bYO9ot3Y5OikQRvY0VYQtvwjeQnizCINJAenh/V7MK2w==}
-
   acorn@8.15.0:
     resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
     engines: {node: '>=0.4.0'}
@@ -618,9 +596,6 @@ packages:
   consola@3.4.2:
     resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
     engines: {node: ^14.18.0 || >=16.10.0}
-
-  csstype@3.2.3:
-    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -1109,6 +1084,8 @@ snapshots:
   '@next/swc-win32-x64-msvc@16.1.4':
     optional: true
 
+  '@pylo/auth@0.0.1': {}
+
   '@rollup/rollup-android-arm-eabi@4.56.0':
     optional: true
 
@@ -1194,13 +1171,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/prop-types@15.7.15': {}
-
-  '@types/react@18.3.27':
-    dependencies:
-      '@types/prop-types': 15.7.15
-      csstype: 3.2.3
-
   acorn@8.15.0: {}
 
   any-promise@1.3.0: {}
@@ -1227,8 +1197,6 @@ snapshots:
   confbox@0.1.8: {}
 
   consola@3.4.2: {}
-
-  csstype@3.2.3: {}
 
   debug@4.4.3:
     dependencies:
