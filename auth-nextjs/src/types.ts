@@ -27,10 +27,20 @@ export interface AuthContext {
   user: PyloUser | null;
   /** True if user is authenticated */
   loggedIn: boolean;
-  /** Redirect to login page with returnTo parameter */
+  /**
+   * Smart redirect that handles Server Actions and API routes automatically.
+   * - For page requests: returns NextResponse.redirect(url)
+   * - For Server Actions/API routes/public paths: returns response (pass through)
+   */
+  redirect: (url: string | URL) => NextResponse;
+  /** @deprecated Use redirect() instead */
   redirectToLogin: () => NextResponse;
   /** The NextResponse to return (with any updated cookies) */
   response: NextResponse;
+  /** True if this is a Server Action request */
+  isServerAction: boolean;
+  /** True if this is an API route request */
+  isApiRoute: boolean;
 }
 
 /**

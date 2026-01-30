@@ -41,6 +41,7 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
 
   const authErrorPatterns = [
     "unauthorized",
+    "unauthenticated",
     "not authenticated",
     "expired token",
     "token expired",
@@ -48,12 +49,17 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
     "jwt expired",
   ];
 
+  const authCodePatterns = [
+    "unauthenticated",
+    "authenticationexception",
+  ];
+
   if (Array.isArray(errors)) {
     return errors.some((e) => {
       const msg = e.message?.toLowerCase() ?? "";
       const code = e.extensions?.code?.toLowerCase() ?? "";
       return (
-        code === "unauthenticated" ||
+        authCodePatterns.some((pattern) => code.includes(pattern)) ||
         authErrorPatterns.some((pattern) => msg.includes(pattern))
       );
     });
@@ -63,7 +69,7 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
     const msg = errors.generalError?.message?.toLowerCase() ?? "";
     const code = errors.generalError?.errorCode?.toLowerCase() ?? "";
     return (
-      code === "unauthenticated" ||
+      authCodePatterns.some((pattern) => code.includes(pattern)) ||
       authErrorPatterns.some((pattern) => msg.includes(pattern))
     );
   }

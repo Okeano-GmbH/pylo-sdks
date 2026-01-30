@@ -1,10 +1,15 @@
-import { cookies } from "next/headers.js";
+import { cookies, headers } from "next/headers.js";
 import { NextResponse } from "next/server.js";
 import type { CookieOptions } from "@pylo/auth";
 
 // Cookie names with pylo prefix
 const AUTH_TOKEN_COOKIE = "pylo_auth_token";
 const REFRESH_TOKEN_COOKIE = "pylo_refresh_token";
+
+// Header set by middleware when auth refresh fails
+const AUTH_FAILED_HEADER = "x-pylo-auth-failed";
+// Header set by middleware with refreshed auth token
+const AUTH_TOKEN_HEADER = "x-pylo-auth-token";
 
 const DEFAULT_COOKIE_OPTIONS: Required<CookieOptions> = {
   secure: process.env.NODE_ENV === "production",
@@ -26,9 +31,29 @@ export function getCookieOptions(options?: CookieOptions): Required<CookieOption
 }
 
 /**
- * Get auth token from cookies (server context)
+ * Get auth token from cookies (server context).
+ * Returns undefined if middleware flagged auth as failed (e.g., refresh token expired).
+ *
+ * Priority:
+ * 1. Check if middleware flagged auth as failed → return undefined
+ * 2. Check for refreshed token header (set by middleware after token refresh) → return header value
+ * 3. Fall back to cookie value
  */
 export async function getAuthToken(): Promise<string | undefined> {
+  const hdrs = await headers();
+
+  // Check if middleware flagged auth as failed (e.g., refresh token expired)
+  if (hdrs.get(AUTH_FAILED_HEADER) === 'true') {
+    return undefined;
+  }
+
+  // Check for refreshed token from middleware (set when token was refreshed)
+  const refreshedToken = hdrs.get(AUTH_TOKEN_HEADER);
+  if (refreshedToken) {
+    return refreshedToken;
+  }
+
+  // Fall back to cookie
   const cookieStore = await cookies();
   return cookieStore.get(AUTH_TOKEN_COOKIE)?.value;
 }

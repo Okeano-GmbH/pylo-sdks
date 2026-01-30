@@ -1,4 +1,3 @@
-import { cookies } from "next/headers.js";
 import { redirect } from "next/navigation.js";
 import {
   graphqlRequest,

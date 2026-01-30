@@ -17,6 +17,32 @@ import {
 } from "./cookies.js";
 
 /**
+ * Detect if this is a Server Action request.
+ * Server Actions are identified by:
+ * - `next-action` header (always present for Server Actions)
+ * - `text/x-component` in Accept header (RSC payload)
+ * - `multipart/form-data` content type (form submissions)
+ */
+function isServerActionRequest(request: NextRequest): boolean {
+  const nextAction = request.headers.get('next-action');
+  const contentType = request.headers.get('content-type') || '';
+  const accept = request.headers.get('accept') || '';
+
+  return !!(
+    nextAction ||
+    accept.includes('text/x-component') ||
+    contentType.includes('multipart/form-data')
+  );
+}
+
+/**
+ * Detect if this is an API route request.
+ */
+function isApiRouteRequest(request: NextRequest): boolean {
+  return request.nextUrl.pathname.startsWith('/api/');
+}
+
+/**
  * Full middleware handler that protects routes and handles auth automatically.
  * This is the simplest way to add auth to your Next.js app.
  *
@@ -38,10 +64,10 @@ export function createPyloProxy(options?: PyloAuthOptions) {
   return async function proxy(request: NextRequest): Promise<NextResponse> {
     const { pathname } = request.nextUrl;
     const publicPaths = options?.publicPaths ?? ["/auth"];
+    const loginPath = options?.loginPath ?? "/auth/login";
 
-    // Check if this is a public path
+    // Check if this is a public path - skip auth entirely
     const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
-
     if (isPublicPath) {
       return NextResponse.next();
     }
@@ -50,7 +76,10 @@ export function createPyloProxy(options?: PyloAuthOptions) {
     const auth = await pyloAuth(request, options);
 
     if (!auth.loggedIn) {
-      return auth.redirectToLogin();
+      // Redirect to login with the current path as redirect parameter
+      const loginUrl = new URL(loginPath, request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return auth.redirect(loginUrl);
     }
 
     return auth.response;
@@ -63,14 +92,18 @@ export function createPyloProxy(options?: PyloAuthOptions) {
  *
  * @example
  * ```ts
- * import { NextResponse } from 'next/server'
  * import { pyloAuth } from '@okeano-gmbh/pylo-auth-nextjs'
  *
  * export async function proxy(request) {
- *   const auth = await pyloAuth(request)
+ *   const auth = await pyloAuth(request, {
+ *     publicPaths: ['/auth'],
+ *   })
  *
- *   if (!auth.loggedIn && !request.nextUrl.pathname.startsWith('/auth')) {
- *     return auth.redirectToLogin()
+ *   if (!auth.loggedIn) {
+ *     // redirect() handles Server Actions, API routes, and public paths automatically
+ *     const loginUrl = new URL('/auth/login', request.url)
+ *     loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
+ *     return auth.redirect(loginUrl)
  *   }
  *
  *   // your custom middleware code
@@ -87,16 +120,42 @@ export async function pyloAuth(
   const graphqlEndpoint = options?.graphqlEndpoint ?? process.env.PYLO_GRAPHQL_ENDPOINT ?? DEFAULT_GRAPHQL_ENDPOINT;
   const appId = options?.appId ?? process.env.PYLO_APP_ID;
   const cookieOptions = options?.cookies;
+  const publicPaths = options?.publicPaths ?? ["/auth"];
+  const { pathname } = request.nextUrl;
 
   const authToken = request.cookies.get(AUTH_TOKEN_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 
+  // Detect request context
+  const isServerAction = isServerActionRequest(request);
+  const isApiRoute = isApiRouteRequest(request);
+  const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
+
+  // Create request headers that we can modify to pass tokens to route handlers
+  const requestHeaders = new Headers(request.headers);
+
   // Create response object that we may modify
-  let response = NextResponse.next();
+  let response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
   let user: PyloUser | null = null;
   let loggedIn = false;
 
-  // Helper to redirect to login
+  // Smart redirect helper - handles Server Actions, API routes, and public paths automatically
+  const createRedirect = (currentResponse: NextResponse) => (url: string | URL): NextResponse => {
+    // For Server Actions, API routes, or public paths - pass through
+    if (isServerAction || isApiRoute || isPublicPath) {
+      return currentResponse;
+    }
+    // For page requests - redirect
+    const redirectResponse = NextResponse.redirect(url);
+    clearAuthCookiesOnResponse(redirectResponse);
+    return redirectResponse;
+  };
+
+  // Legacy helper for backwards compatibility
   const redirectToLogin = (): NextResponse => {
     const loginUrl = new URL(loginPath, request.url);
     const redirectResponse = NextResponse.redirect(loginUrl);
@@ -106,31 +165,77 @@ export async function pyloAuth(
 
   // No tokens at all
   if (!authToken && !refreshToken) {
-    return { user: null, loggedIn: false, redirectToLogin, response };
+    return { user: null, loggedIn: false, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
   }
 
-  // Check if token is expired (not just within buffer - buffer causes race conditions with parallel requests)
-  const isExpired = !authToken || isTokenExpired(authToken, 0);
+  // Check if token is expired or will expire within 10 seconds
+  // Note: buffer must be shorter than token lifetime (currently ~30s)
+  const isExpired = !authToken || isTokenExpired(authToken, 10);
+
+  // Store refresh result to avoid duplicate calls
+  let refreshResult: { success: boolean; authToken?: string; refreshToken?: string } | null = null;
 
   if (isExpired && refreshToken) {
     // Token is expired, attempt to refresh
-    const result = await refreshTokens(graphqlEndpoint, refreshToken, appId);
+    refreshResult = await refreshTokens(graphqlEndpoint, refreshToken, appId);
 
-    if (result.success && result.authToken && result.refreshToken) {
-      // Refresh succeeded - set new cookies on response
-      setAuthCookiesOnResponse(response, result.authToken, result.refreshToken, cookieOptions);
+    if (refreshResult.success && refreshResult.authToken && refreshResult.refreshToken) {
+      // Refresh succeeded
       loggedIn = true;
     } else {
-      // Refresh failed - clear cookies
+      // Refresh failed - clear cookies and signal to downstream code
       clearAuthCookiesOnResponse(response);
-      return { user: null, loggedIn: false, redirectToLogin, response };
+
+      // Set a header to signal that auth failed (for Server Actions/API routes that pass through)
+      requestHeaders.set('x-pylo-auth-failed', 'true');
+      response = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+      clearAuthCookiesOnResponse(response);
+
+      return { user: null, loggedIn: false, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
     }
   } else if (authToken && !isExpired) {
     // Valid token exists
     loggedIn = true;
   }
 
-  return { user, loggedIn, redirectToLogin, response };
+  // If we refreshed, update the request cookies so route handlers see the new tokens
+  if (refreshResult?.success && refreshResult.authToken && refreshResult.refreshToken) {
+    // Parse existing cookies and update with new tokens
+    const existingCookies = request.headers.get('cookie') || '';
+    const cookiePairs = existingCookies.split(';').map(c => c.trim()).filter(Boolean);
+
+    // Remove old auth cookies and add new ones
+    const filteredCookies = cookiePairs.filter(c => {
+      const name = c.split('=')[0];
+      return name !== AUTH_TOKEN_COOKIE && name !== REFRESH_TOKEN_COOKIE;
+    });
+
+    filteredCookies.push(`${AUTH_TOKEN_COOKIE}=${refreshResult.authToken}`);
+    filteredCookies.push(`${REFRESH_TOKEN_COOKIE}=${refreshResult.refreshToken}`);
+
+    // Update the cookie header on the request
+    requestHeaders.set('cookie', filteredCookies.join('; '));
+
+    // Also set a custom header with the refreshed auth token for API routes
+    // (cookies() from next/headers reads original cookies, not middleware-modified ones)
+    requestHeaders.set('x-pylo-auth-token', refreshResult.authToken);
+
+    // Recreate response with updated request cookies
+    response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+
+    // Set cookies on response to send new tokens back to browser
+    setAuthCookiesOnResponse(response, refreshResult.authToken, refreshResult.refreshToken, cookieOptions);
+  }
+
+  return { user, loggedIn, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
 }
 
 /**
@@ -158,7 +263,8 @@ async function refreshTokens(
     }
 
     return { success: false };
-  } catch {
+  } catch (error) {
+    console.error('[pylo-auth] Token refresh error:', error);
     return { success: false };
   }
 }
