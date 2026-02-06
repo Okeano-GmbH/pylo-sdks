@@ -84,7 +84,7 @@ export async function graphqlRequest<T>(
   endpoint: string,
   query: string,
   variables?: Record<string, unknown>,
-  options?: { token?: string; appId?: string }
+  options?: { token?: string }
 ): Promise<GraphQLResponse<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -94,9 +94,6 @@ export async function graphqlRequest<T>(
     headers["Authorization"] = `Bearer ${options.token}`;
   }
 
-  if (options?.appId) {
-    headers["X-Pylo-App-Id"] = options.appId;
-  }
 
   const response = await fetch(endpoint, {
     method: "POST",

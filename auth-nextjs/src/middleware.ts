@@ -12,8 +12,8 @@ import type { PyloAuthOptions, AuthContext } from "./types.js";
 import {
   setAuthCookiesOnResponse,
   clearAuthCookiesOnResponse,
-  AUTH_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
+  getAuthTokenCookieName,
+  getRefreshTokenCookieName,
 } from "./cookies.js";
 
 /**
@@ -100,13 +100,10 @@ export function createPyloProxy(options?: PyloAuthOptions) {
  *   })
  *
  *   if (!auth.loggedIn) {
- *     // redirect() handles Server Actions, API routes, and public paths automatically
  *     const loginUrl = new URL('/auth/login', request.url)
  *     loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
  *     return auth.redirect(loginUrl)
  *   }
- *
- *   // your custom middleware code
  *
  *   return auth.response
  * }
@@ -118,13 +115,15 @@ export async function pyloAuth(
 ): Promise<AuthContext> {
   const loginPath = options?.loginPath ?? "/auth/login";
   const graphqlEndpoint = options?.graphqlEndpoint ?? process.env.PYLO_GRAPHQL_ENDPOINT ?? DEFAULT_GRAPHQL_ENDPOINT;
-  const appId = options?.appId ?? process.env.PYLO_APP_ID;
   const cookieOptions = options?.cookies;
   const publicPaths = options?.publicPaths ?? ["/auth"];
   const { pathname } = request.nextUrl;
 
-  const authToken = request.cookies.get(AUTH_TOKEN_COOKIE)?.value;
-  const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
+  const authTokenCookieName = getAuthTokenCookieName();
+  const refreshTokenCookieName = getRefreshTokenCookieName();
+
+  const authToken = request.cookies.get(authTokenCookieName)?.value;
+  const refreshToken = request.cookies.get(refreshTokenCookieName)?.value;
 
   // Detect request context
   const isServerAction = isServerActionRequest(request);
@@ -177,7 +176,7 @@ export async function pyloAuth(
 
   if (isExpired && refreshToken) {
     // Token is expired, attempt to refresh
-    refreshResult = await refreshTokens(graphqlEndpoint, refreshToken, appId);
+    refreshResult = await refreshTokens(graphqlEndpoint, refreshToken);
 
     if (refreshResult.success && refreshResult.authToken && refreshResult.refreshToken) {
       // Refresh succeeded
@@ -211,11 +210,11 @@ export async function pyloAuth(
     // Remove old auth cookies and add new ones
     const filteredCookies = cookiePairs.filter(c => {
       const name = c.split('=')[0];
-      return name !== AUTH_TOKEN_COOKIE && name !== REFRESH_TOKEN_COOKIE;
+      return name !== authTokenCookieName && name !== refreshTokenCookieName;
     });
 
-    filteredCookies.push(`${AUTH_TOKEN_COOKIE}=${refreshResult.authToken}`);
-    filteredCookies.push(`${REFRESH_TOKEN_COOKIE}=${refreshResult.refreshToken}`);
+    filteredCookies.push(`${authTokenCookieName}=${refreshResult.authToken}`);
+    filteredCookies.push(`${refreshTokenCookieName}=${refreshResult.refreshToken}`);
 
     // Update the cookie header on the request
     requestHeaders.set('cookie', filteredCookies.join('; '));
@@ -243,15 +242,13 @@ export async function pyloAuth(
  */
 async function refreshTokens(
   endpoint: string,
-  refreshToken: string,
-  appId?: string
+  refreshToken: string
 ): Promise<{ success: boolean; authToken?: string; refreshToken?: string }> {
   try {
     const response = await graphqlRequest<RefreshTokenResponse>(
       endpoint,
       REFRESH_TOKEN_MUTATION,
-      { input: { refresh_token: refreshToken } },
-      appId ? { appId } : undefined
+      { input: { refresh_token: refreshToken } }
     );
 
     if (response.data?.refreshToken?.data) {

@@ -12,8 +12,6 @@ export interface PyloUser {
 export interface PyloAuthConfig {
   /** GraphQL API endpoint. Default: 'https://api.pyloapp.com/graphql' */
   graphqlEndpoint?: string;
-  /** Optional Pylo App ID for multi-app setups */
-  appId?: string;
   /** Seconds before token expiry to trigger refresh. Default: 60 */
   tokenRefreshBuffer?: number;
 }

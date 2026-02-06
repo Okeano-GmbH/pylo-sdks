@@ -2,10 +2,6 @@ import { cookies, headers } from "next/headers.js";
 import { NextResponse } from "next/server.js";
 import type { CookieOptions } from "@pylo/auth";
 
-// Cookie names with pylo prefix
-const AUTH_TOKEN_COOKIE = "pylo_auth_token";
-const REFRESH_TOKEN_COOKIE = "pylo_refresh_token";
-
 // Header set by middleware when auth refresh fails
 const AUTH_FAILED_HEADER = "x-pylo-auth-failed";
 // Header set by middleware with refreshed auth token
@@ -19,6 +15,28 @@ const DEFAULT_COOKIE_OPTIONS: Required<CookieOptions> = {
   authMaxAge: 60 * 60, // 1 hour
   refreshMaxAge: 60 * 60 * 24 * 7, // 7 days
 };
+
+function getAppId(): string {
+  const appId = process.env.PYLO_APP_ID;
+  if (!appId) {
+    throw new Error("[pylo-auth] Missing required PYLO_APP_ID environment variable");
+  }
+  return appId;
+}
+
+/**
+ * Get the app-scoped auth token cookie name
+ */
+export function getAuthTokenCookieName(): string {
+  return `pylo_auth_token_${getAppId()}`;
+}
+
+/**
+ * Get the app-scoped refresh token cookie name
+ */
+export function getRefreshTokenCookieName(): string {
+  return `pylo_refresh_token_${getAppId()}`;
+}
 
 /**
  * Get merged cookie options with defaults
@@ -55,7 +73,7 @@ export async function getAuthToken(): Promise<string | undefined> {
 
   // Fall back to cookie
   const cookieStore = await cookies();
-  return cookieStore.get(AUTH_TOKEN_COOKIE)?.value;
+  return cookieStore.get(getAuthTokenCookieName())?.value;
 }
 
 /**
@@ -63,7 +81,7 @@ export async function getAuthToken(): Promise<string | undefined> {
  */
 export async function getRefreshToken(): Promise<string | undefined> {
   const cookieStore = await cookies();
-  return cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+  return cookieStore.get(getRefreshTokenCookieName())?.value;
 }
 
 /**
@@ -85,12 +103,12 @@ export async function setAuthCookies(
     ...(opts.domain ? { domain: opts.domain } : {}),
   } as const;
 
-  cookieStore.set(AUTH_TOKEN_COOKIE, authToken, {
+  cookieStore.set(getAuthTokenCookieName(), authToken, {
     ...baseOptions,
     maxAge: opts.authMaxAge,
   });
 
-  cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+  cookieStore.set(getRefreshTokenCookieName(), refreshToken, {
     ...baseOptions,
     maxAge: opts.refreshMaxAge,
   });
@@ -101,8 +119,8 @@ export async function setAuthCookies(
  */
 export async function clearAuthCookies(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(AUTH_TOKEN_COOKIE);
-  cookieStore.delete(REFRESH_TOKEN_COOKIE);
+  cookieStore.delete(getAuthTokenCookieName());
+  cookieStore.delete(getRefreshTokenCookieName());
 }
 
 /**
@@ -124,12 +142,12 @@ export function setAuthCookiesOnResponse(
     ...(opts.domain ? { domain: opts.domain } : {}),
   } as const;
 
-  response.cookies.set(AUTH_TOKEN_COOKIE, authToken, {
+  response.cookies.set(getAuthTokenCookieName(), authToken, {
     ...baseOptions,
     maxAge: opts.authMaxAge,
   });
 
-  response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+  response.cookies.set(getRefreshTokenCookieName(), refreshToken, {
     ...baseOptions,
     maxAge: opts.refreshMaxAge,
   });
@@ -139,9 +157,6 @@ export function setAuthCookiesOnResponse(
  * Clear auth cookies on a NextResponse (middleware context)
  */
 export function clearAuthCookiesOnResponse(response: NextResponse): void {
-  response.cookies.delete(AUTH_TOKEN_COOKIE);
-  response.cookies.delete(REFRESH_TOKEN_COOKIE);
+  response.cookies.delete(getAuthTokenCookieName());
+  response.cookies.delete(getRefreshTokenCookieName());
 }
-
-// Export cookie names for use in middleware
-export { AUTH_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };

@@ -27,4 +27,6 @@ export {
   getRefreshToken,
   setAuthCookies,
   clearAuthCookies,
+  getAuthTokenCookieName,
+  getRefreshTokenCookieName,
 } from "./cookies.js";

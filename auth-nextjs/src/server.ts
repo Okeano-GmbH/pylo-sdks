@@ -18,7 +18,14 @@ import { getAuthToken, getRefreshToken, setAuthCookies, clearAuthCookies } from 
 
 const getEndpoint = (): string =>
   process.env.PYLO_GRAPHQL_ENDPOINT ?? process.env.GRAPHQL_ENDPOINT ?? DEFAULT_GRAPHQL_ENDPOINT;
-const getAppId = (): string | undefined => process.env.PYLO_APP_ID;
+
+const getAppId = (): string => {
+  const appId = process.env.PYLO_APP_ID;
+  if (!appId) {
+    throw new Error("[pylo-auth] Missing required PYLO_APP_ID environment variable");
+  }
+  return appId;
+};
 
 /**
  * Get the currently authenticated user.
@@ -43,14 +50,13 @@ export async function getUser(): Promise<PyloUser | null> {
   const token = await getAuthToken();
   if (!token) return null;
 
-  const appId = getAppId();
   const endpoint = getEndpoint();
 
   const response = await graphqlRequest<MeResponse>(
     endpoint,
     ME_QUERY,
     undefined,
-    appId ? { token, appId } : { token }
+    { token }
   );
 
   if (hasErrors(response) || !response.data) {
@@ -129,8 +135,7 @@ export async function login(email: string, password: string): Promise<AuthResult
   const response = await graphqlRequest<LoginResponse>(
     endpoint,
     LOGIN_MUTATION,
-    { input: { email, password } },
-    appId ? { appId } : undefined
+    { input: { email, password, pylo_app_id: appId } }
   );
 
   if (hasErrors(response)) {
@@ -201,12 +206,10 @@ export async function refreshTokens(): Promise<AuthResult> {
     };
   }
 
-  const appId = getAppId();
   const response = await graphqlRequest<RefreshTokenResponse>(
     getEndpoint(),
     REFRESH_TOKEN_MUTATION,
-    { input: { refresh_token: refreshToken } },
-    appId ? { appId } : undefined
+    { input: { refresh_token: refreshToken } }
   );
 
   if (hasErrors(response)) {

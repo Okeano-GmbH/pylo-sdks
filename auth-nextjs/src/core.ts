@@ -4,4 +4,4 @@ export * from "@pylo/auth";
 
 // Also export getAuthToken for use in API routes
 // (importing from main index.ts brings in middleware code that breaks in route handlers)
-export { getAuthToken } from "./cookies.js";
+export { getAuthToken, getAuthTokenCookieName, getRefreshTokenCookieName } from "./cookies.js";
