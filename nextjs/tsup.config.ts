@@ -1,8 +1,15 @@
 import { defineConfig } from "tsup";
 
-const shared = {
-  format: ["esm"] as const,
+export default defineConfig({
+  entry: [
+    "src/index.ts",
+    "src/server.ts",
+    "src/hooks.ts",
+    "src/api.ts",
+  ],
+  format: ["esm"],
   outDir: "dist",
+  dts: true,
   splitting: false,
   external: [
     "react",
@@ -12,24 +19,4 @@ const shared = {
     "next/headers",
     "@tanstack/react-query",
   ],
-};
-
-export default defineConfig([
-  {
-    ...shared,
-    entry: [
-      "src/index.ts",
-      "src/server.ts",
-      "src/hooks.ts",
-      "src/api.ts",
-      "src/codegen/index.ts",
-    ],
-    dts: true,
-  },
-  {
-    ...shared,
-    entry: ["src/cli.ts"],
-    banner: { js: "#!/usr/bin/env node" },
-    dts: false,
-  },
-]);
+});

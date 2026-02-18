@@ -37,6 +37,25 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  core:
+    dependencies:
+      '@pylo/auth':
+        specifier: workspace:*
+        version: link:../auth
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.7
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(jiti@2.6.1)(postcss@8.4.31)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   nextjs:
     dependencies:
       '@pylo/auth':
@@ -45,9 +64,9 @@ importers:
       '@pylo/auth-nextjs':
         specifier: workspace:*
         version: link:../auth-nextjs
-      jiti:
-        specifier: ^2.6.1
-        version: 2.6.1
+      '@pylo/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@tanstack/react-query':
         specifier: ^5.0.0
@@ -64,6 +83,22 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.4
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(jiti@2.6.1)(postcss@8.4.31)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  node-sdk:
+    dependencies:
+      '@pylo/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.7
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.6.1)(postcss@8.4.31)(typescript@5.9.3)

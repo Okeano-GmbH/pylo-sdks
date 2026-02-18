@@ -1,5 +1,5 @@
 // @pylo/nextjs — main entry point
-// Re-exports shared types + PyloError
+// Re-exports shared types, SDK types, and PyloError from @pylo/core
 
 export type {
   QueryOperator,
@@ -13,9 +13,6 @@ export type {
   SearchValueInput,
   EntityMetadata,
   SchemaMetadata,
-} from "./shared-types.js";
-
-export type {
   EntityName,
   EntityFields,
   EntityRelations,
@@ -25,6 +22,6 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
-} from "./types.js";
+} from "@pylo/core";
 
-export { PyloError } from "./server.js";
+export { PyloError } from "@pylo/core";

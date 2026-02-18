@@ -41,7 +41,7 @@ export async function loadConfig(cwd: string): Promise<ResolvedPyloConfig> {
       };
       if (!mod.default) {
         throw new Error(
-          `${filename} must have a default export. Use defineConfig() from '@pylo/nextjs/codegen'.`,
+          `${filename} must have a default export. Use defineConfig() from '@pylo/core/codegen'.`,
         );
       }
       const config = mod.default;
@@ -58,6 +58,6 @@ export async function loadConfig(cwd: string): Promise<ResolvedPyloConfig> {
   }
 
   throw new Error(
-    "No pylo.config.ts or pylo.config.js found in project root. Create one using defineConfig() from '@pylo/nextjs/codegen'.",
+    "No pylo.config.ts or pylo.config.js found in project root. Create one using defineConfig() from '@pylo/core/codegen'.",
   );
 }

@@ -11,10 +11,12 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery } from "./query-builder.js";
-import { buildUpsertMutation, buildDeleteMutation } from "./mutation-builder.js";
-import type { SchemaMetadata, PaginationData, FilterInput } from "./shared-types.js";
+import { buildListQuery, buildByIdQuery } from "@pylo/core";
+import { buildUpsertMutation, buildDeleteMutation } from "@pylo/core";
 import type {
+  SchemaMetadata,
+  PaginationData,
+  FilterInput,
   EntityName,
   EntitySelect,
   EntityResult,
@@ -22,7 +24,7 @@ import type {
   ByIdOptions,
   UpsertInput,
   StrictSelect,
-} from "./types.js";
+} from "@pylo/core";
 
 interface HooksOptions {
   apiPath?: string;

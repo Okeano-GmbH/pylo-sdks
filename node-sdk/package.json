@@ -1,0 +1,26 @@
+{
+  "name": "@pylo/node",
+  "version": "0.0.1",
+  "description": "Server-side Pylo SDK with API key authentication",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm --out-dir dist",
+    "watch": "tsc -w",
+    "prepublishOnly": "pnpm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@pylo/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.1"
+}

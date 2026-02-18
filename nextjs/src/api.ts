@@ -7,6 +7,7 @@ import { getAuthToken } from "@pylo/auth-nextjs/core";
 
 interface ApiRouteOptions {
   endpoint?: string;
+  apiKey?: string;
 }
 
 interface RequestBody {
@@ -23,12 +24,19 @@ export function createPyloApiRoute(options?: ApiRouteOptions) {
   const endpoint = getEndpoint(options);
 
   async function POST(request: Request): Promise<Response> {
-    const token = await getAuthToken();
-    if (!token) {
-      return Response.json(
-        { errors: [{ message: "Unauthorized" }] },
-        { status: 401 },
-      );
+    let authOptions: { token?: string; apiKey?: string };
+
+    if (options?.apiKey) {
+      authOptions = { apiKey: options.apiKey };
+    } else {
+      const token = await getAuthToken();
+      if (!token) {
+        return Response.json(
+          { errors: [{ message: "Unauthorized" }] },
+          { status: 401 },
+        );
+      }
+      authOptions = { token };
     }
 
     let body: RequestBody;
@@ -53,7 +61,7 @@ export function createPyloApiRoute(options?: ApiRouteOptions) {
         endpoint,
         body.query,
         body.variables,
-        { token },
+        authOptions,
       );
 
       if (hasErrors(result)) {

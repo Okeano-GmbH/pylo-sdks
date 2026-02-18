@@ -1,5 +1,7 @@
 packages:
   - "auth"
   - "auth-nextjs"
+  - "core"
+  - "node-sdk"
   - "node-utils"
   - "nextjs"

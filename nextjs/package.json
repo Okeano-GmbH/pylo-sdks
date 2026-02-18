@@ -1,11 +1,8 @@
 {
   "name": "@pylo/nextjs",
-  "version": "0.1.0",
-  "description": "Type-safe Next.js SDK for Pylo — codegen, server client, React Query hooks, API route handler",
+  "version": "0.0.1",
+  "description": "Type-safe Next.js SDK for Pylo — server client, React Query hooks, API route handler",
   "type": "module",
-  "bin": {
-    "pylo": "dist/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,10 +19,6 @@
     "./api": {
       "types": "./dist/api.d.ts",
       "import": "./dist/api.js"
-    },
-    "./codegen": {
-      "types": "./dist/codegen/index.d.ts",
-      "import": "./dist/codegen/index.js"
     }
   },
   "main": "dist/index.js",
@@ -41,7 +34,7 @@
   "dependencies": {
     "@pylo/auth": "workspace:*",
     "@pylo/auth-nextjs": "workspace:*",
-    "jiti": "^2.6.1"
+    "@pylo/core": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-query": ">=5.0.0",
