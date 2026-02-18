@@ -44,6 +44,5 @@ export type {
   PyloClient,
 } from "./client.js";
 
-// Codegen
-export { defineConfig } from "./codegen/index.js";
+// Codegen types only (import defineConfig from "@pylo/core/codegen")
 export type { PyloConfig } from "./codegen/index.js";

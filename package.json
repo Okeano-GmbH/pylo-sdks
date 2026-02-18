@@ -1,0 +1,10 @@
+{
+	"scripts": {
+		"changeset": "changeset",
+		"version": "changeset version",
+		"publish-new-versions": "pnpm -r build && pnpm -r publish --access public"
+	},
+	"devDependencies": {
+		"@changesets/cli": "^2.29.8"
+	}
+}

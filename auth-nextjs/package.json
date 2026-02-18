@@ -1,6 +1,6 @@
 {
   "name": "@pylo/auth-nextjs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Next.js authentication utilities for Pylo",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,7 +35,7 @@
     "next": ">=14.0.0"
   },
   "dependencies": {
-    "@pylo/auth": "^0.0.1"
+    "@pylo/auth": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
