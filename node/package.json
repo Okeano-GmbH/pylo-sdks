@@ -1,7 +1,17 @@
 {
   "name": "@pylo/node",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Server-side Pylo SDK with API key authentication",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js"
+    }
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",

@@ -2,6 +2,6 @@ packages:
   - "auth"
   - "auth-nextjs"
   - "core"
-  - "node-sdk"
+  - "node"
   - "node-utils"
   - "nextjs"

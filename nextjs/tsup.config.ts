@@ -7,6 +7,7 @@ export default defineConfig([
       "src/server.ts",
       "src/hooks.ts",
       "src/api.ts",
+      "src/codegen.ts",
     ],
     format: ["esm"],
     outDir: "dist",

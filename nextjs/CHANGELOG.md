@@ -1,5 +1,11 @@
 # @pylo/nextjs
 
+## 0.0.4
+
+### Patch Changes
+
+- fixes for the cli
+
 ## 0.0.3
 
 ### Patch Changes
