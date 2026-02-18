@@ -1,0 +1,67 @@
+{
+  "name": "@pylo/nextjs",
+  "version": "0.1.0",
+  "description": "Type-safe Next.js SDK for Pylo — codegen, server client, React Query hooks, API route handler",
+  "type": "module",
+  "bin": {
+    "pylo": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks.d.ts",
+      "import": "./dist/hooks.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "import": "./dist/codegen/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsc -w",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@pylo/auth": "workspace:*",
+    "@pylo/auth-nextjs": "workspace:*",
+    "jiti": "^2.6.1"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
+    "next": ">=14.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.0.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.1"
+}
