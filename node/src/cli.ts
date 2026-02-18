@@ -1,0 +1,1 @@
+import "@pylo/core/cli";

@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "bin": {
+    "pylo": "dist/cli.js"
+  },
   "scripts": {
-    "build": "tsup src/index.ts --dts --format esm --out-dir dist",
+    "build": "tsup",
     "watch": "tsc -w",
     "prepublishOnly": "pnpm run build"
   },

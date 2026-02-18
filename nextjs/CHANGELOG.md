@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.3
+
+### Patch Changes
+
+- fixes the reexport of the cli bin
+- Updated dependencies
+  - @pylo/core@0.0.4
+
 ## 0.0.2
 
 ### Patch Changes
