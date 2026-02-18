@@ -1,0 +1,40 @@
+{
+  "name": "@pylo/core",
+  "version": "0.0.1",
+  "description": "Core entity client, types, query builders, and codegen for Pylo SDKs",
+  "type": "module",
+  "bin": {
+    "pylo": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "import": "./dist/codegen/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsc -w",
+    "prepublishOnly": "pnpm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@pylo/auth": "workspace:*",
+    "jiti": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.1"
+}

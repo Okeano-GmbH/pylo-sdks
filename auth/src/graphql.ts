@@ -84,7 +84,7 @@ export async function graphqlRequest<T>(
   endpoint: string,
   query: string,
   variables?: Record<string, unknown>,
-  options?: { token?: string }
+  options?: { token?: string; apiKey?: string }
 ): Promise<GraphQLResponse<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -92,6 +92,10 @@ export async function graphqlRequest<T>(
 
   if (options?.token) {
     headers["Authorization"] = `Bearer ${options.token}`;
+  }
+
+  if (options?.apiKey) {
+    headers["pylo-api-key"] = options.apiKey;
   }
 
 
