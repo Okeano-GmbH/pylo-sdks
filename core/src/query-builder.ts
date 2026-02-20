@@ -61,7 +61,14 @@ function buildSelectionSet(
 
     // Check if it's a relation
     const relation = entityMeta.relations[key];
-    if (!relation) continue;
+    if (!relation) {
+      if (schemaMetadata.unknownFieldBehavior === "ignore") continue;
+      const validFields = entityMeta.scalarFieldNames.join(", ");
+      const validRelations = Object.keys(entityMeta.relations).join(", ");
+      throw new Error(
+        `Unknown field "${key}" on entity "${entityMeta.pascalName}". Valid fields: ${validFields}. Valid relations: ${validRelations}`,
+      );
+    }
 
     const targetMeta = schemaMetadata.entities[relation.entity];
     if (!targetMeta) continue;

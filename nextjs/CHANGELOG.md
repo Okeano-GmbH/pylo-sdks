@@ -1,5 +1,15 @@
 # @pylo/nextjs
 
+## 0.0.5
+
+### Patch Changes
+
+- see commit
+- Updated dependencies
+  - @pylo/auth@0.0.4
+  - @pylo/core@0.0.5
+  - @pylo/auth-nextjs@0.1.2
+
 ## 0.0.4
 
 ### Patch Changes

@@ -77,6 +77,28 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
   return false;
 }
 
+export function mergeHeaders(
+  global?: Record<string, string>,
+  perOp?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!global && !perOp) return undefined;
+  return { ...global, ...perOp };
+}
+
+const PROTECTED_HEADERS = new Set(["authorization", "pylo-api-key", "content-type"]);
+
+function stripProtectedHeaders(
+  custom: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(custom)) {
+    if (!PROTECTED_HEADERS.has(key.toLowerCase())) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 /**
  * Make a GraphQL request
  */
@@ -84,9 +106,10 @@ export async function graphqlRequest<T>(
   endpoint: string,
   query: string,
   variables?: Record<string, unknown>,
-  options?: { token?: string; apiKey?: string }
+  options?: { token?: string; apiKey?: string; headers?: Record<string, string> }
 ): Promise<GraphQLResponse<T>> {
   const headers: Record<string, string> = {
+    ...(options?.headers ? stripProtectedHeaders(options.headers) : {}),
     "Content-Type": "application/json",
   };
 
@@ -97,7 +120,6 @@ export async function graphqlRequest<T>(
   if (options?.apiKey) {
     headers["pylo-api-key"] = options.apiKey;
   }
-
 
   const response = await fetch(endpoint, {
     method: "POST",

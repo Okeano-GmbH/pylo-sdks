@@ -24,6 +24,7 @@ export {
   hasErrors,
   isUnauthorizedError,
   graphqlRequest,
+  mergeHeaders,
 } from "./graphql.js";
 
 // Mutations

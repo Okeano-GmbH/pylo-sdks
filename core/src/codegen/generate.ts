@@ -163,6 +163,7 @@ export function generateEntitiesFile(entities: AnalyzedEntity[]): string {
 
 export function generateSchemaMetadataFile(
   entities: AnalyzedEntity[],
+  unknownFieldBehavior: "error" | "ignore",
 ): string {
   const lines: string[] = [];
 
@@ -172,6 +173,7 @@ export function generateSchemaMetadataFile(
     "import type { SchemaMetadata } from '@pylo/core';",
     "",
     "export const schemaMetadata: SchemaMetadata = {",
+    `  unknownFieldBehavior: '${unknownFieldBehavior}',`,
     "  entities: {",
   );
 

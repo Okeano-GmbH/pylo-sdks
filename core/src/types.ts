@@ -210,3 +210,8 @@ export interface ListResult<T> {
   data: T[];
   pagination: PaginationData;
 }
+
+// Transport-level options for individual operations
+export interface RequestOptions {
+  headers?: Record<string, string>;
+}

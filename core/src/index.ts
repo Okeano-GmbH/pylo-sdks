@@ -25,11 +25,15 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  RequestOptions,
 } from "./types.js";
 
 // Query & mutation builders
 export { buildListQuery, buildByIdQuery } from "./query-builder.js";
 export { buildUpsertMutation, buildDeleteMutation } from "./mutation-builder.js";
+
+// Header utilities
+export { mergeHeaders } from "@pylo/auth";
 
 // Client
 export {

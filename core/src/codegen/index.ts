@@ -31,7 +31,7 @@ export async function generate(cwd?: string): Promise<void> {
   const files: Record<string, string> = {
     "index.ts": generateIndexFile(entities),
     "entities.ts": generateEntitiesFile(entities),
-    "schema-metadata.ts": generateSchemaMetadataFile(entities),
+    "schema-metadata.ts": generateSchemaMetadataFile(entities, config.unknownFieldBehavior),
   };
 
   console.log(`Writing files to ${outputDir}...`);

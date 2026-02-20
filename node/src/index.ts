@@ -5,6 +5,7 @@ interface NodeClientOptions {
   apiKey: string;
   endpoint?: string;
   schemaMetadata: SchemaMetadata;
+  headers?: Record<string, string>;
 }
 
 export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
@@ -12,6 +13,7 @@ export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
     schemaMetadata: options.schemaMetadata,
     auth: async () => ({ apiKey: options.apiKey }),
+    ...(options.headers !== undefined ? { headers: options.headers } : {}),
   });
 }
 
@@ -38,6 +40,7 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  RequestOptions,
   AuthProvider,
   ClientOptions,
   EntityClient,

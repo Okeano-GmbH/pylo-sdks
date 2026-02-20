@@ -77,12 +77,14 @@ export const upsertEntityInstance = async ({
   returnFields = ["id"],
   isUpdateForSeachValueRequests = false,
   client,
+  headers,
 }: {
   entityName: string;
   input: object;
   returnFields?: Array<string>;
   isUpdateForSeachValueRequests?: boolean;
   client: GraphQLClient;
+  headers?: Record<string, string>;
 }) => {
   const isUpdate = isUpdateForSeachValueRequests || "id" in input;
 
@@ -157,7 +159,7 @@ export const upsertEntityInstance = async ({
 
   const updateEntityInstance = (await client.request(upsertMutationDocument, {
     input,
-  })) as {
+  }, headers)) as {
     [key: typeof entityName]: { data: { id: string } };
   };
 
@@ -206,12 +208,14 @@ export const getEntityInstanceList = async <T = object>({
   filter = {},
   fieldsToFetch = ["id"],
   client,
+  headers,
 }: {
   entityName: string;
   paginationInput?: PaginationInput;
   filter?: FilterInput;
   fieldsToFetch?: Array<string>;
   client: GraphQLClient;
+  headers?: Record<string, string>;
 }): Promise<{
   entityInstances: Array<T>;
   pagination: PaginationData;
@@ -235,7 +239,7 @@ export const getEntityInstanceList = async <T = object>({
     const entityInstances = (await client.request(queryDocument, {
       filter,
       pagination: paginationInput,
-    })) as {
+    }, headers)) as {
       [key: typeof lowerCaseEntityName]: {
         data: Array<T>;
         pagination: { current_page: number; has_more_pages: boolean };

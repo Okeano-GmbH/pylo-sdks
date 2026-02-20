@@ -22,6 +22,7 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  RequestOptions,
 } from "@pylo/core";
 
 export { PyloError } from "@pylo/core";

@@ -1,5 +1,13 @@
 # @pylo/core
 
+## 0.0.5
+
+### Patch Changes
+
+- see commit
+- Updated dependencies
+  - @pylo/auth@0.0.4
+
 ## 0.0.4
 
 ### Patch Changes

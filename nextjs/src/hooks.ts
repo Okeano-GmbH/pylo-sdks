@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery } from "@pylo/core";
+import { buildListQuery, buildByIdQuery, mergeHeaders } from "@pylo/core";
 import { buildUpsertMutation, buildDeleteMutation } from "@pylo/core";
 import type {
   SchemaMetadata,
@@ -24,11 +24,13 @@ import type {
   ByIdOptions,
   UpsertInput,
   StrictSelect,
+  RequestOptions,
 } from "@pylo/core";
 
 interface HooksOptions {
   apiPath?: string;
   schemaMetadata: SchemaMetadata;
+  headers?: Record<string, string>;
 }
 
 interface ListHookResult<T> {
@@ -45,7 +47,7 @@ type InfiniteListOptions<S, E extends EntityName<S>, Sel extends EntitySelect<S,
     ? EntitySelect<S, E>
     : StrictSelect<Sel, EntitySelect<S, E>>;
   filter?: FilterInput;
-};
+} & RequestOptions;
 
 interface PageData {
   data: unknown[];
@@ -56,11 +58,16 @@ async function clientFetch(
   apiPath: string,
   query: string,
   variables: Record<string, unknown>,
+  headers?: Record<string, string>,
 ): Promise<unknown> {
   const response = await fetch(apiPath, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({
+      query,
+      variables,
+      ...(headers !== undefined ? { headers } : {}),
+    }),
   });
 
   if (!response.ok) {
@@ -82,14 +89,16 @@ async function clientFetch(
 export function createPyloHooks<S>(options: HooksOptions) {
   const apiPath = options.apiPath ?? "/api/graphql";
   const metadata = options.schemaMetadata;
+  const globalHeaders = options.headers;
 
   function usePyloList<
     E extends EntityName<S>,
     Sel extends EntitySelect<S, E> | undefined = undefined,
   >(
     entity: E,
-    queryOptions?: ListOptions<S, E, Sel>,
+    queryOptions?: ListOptions<S, E, Sel> & RequestOptions,
   ): ListHookResult<EntityResult<S, E, Sel>> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     const queryKey = [
       "pylo",
       entity,
@@ -98,6 +107,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
         filter: queryOptions?.filter,
         pagination: queryOptions?.pagination,
         select: queryOptions?.select,
+        headers: merged,
       },
     ];
 
@@ -110,7 +120,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           metadata,
         );
 
-        const data = (await clientFetch(apiPath, query, variables)) as Record<
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
           string,
           { data: unknown[]; pagination: PaginationData }
         >;
@@ -143,6 +153,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     }>;
   }> {
     const perPage = infiniteOptions?.perPage ?? 20;
+    const merged = mergeHeaders(globalHeaders, infiniteOptions?.headers);
 
     return useInfiniteQuery({
       queryKey: [
@@ -153,6 +164,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           perPage,
           filter: infiniteOptions?.filter,
           select: infiniteOptions?.select,
+          headers: merged,
         },
       ],
       queryFn: async ({ pageParam }: { pageParam: number }) => {
@@ -168,7 +180,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           metadata,
         );
 
-        const data = (await clientFetch(apiPath, query, variables)) as Record<
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
           string,
           PageData
         >;
@@ -212,10 +224,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
   >(
     entity: E,
     id: string | null | undefined,
-    queryOptions?: ByIdOptions<S, E, Sel>,
+    queryOptions?: ByIdOptions<S, E, Sel> & RequestOptions,
   ): UseQueryResult<EntityResult<S, E, Sel> | null> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     return useQuery({
-      queryKey: ["pylo", entity, "byId", id, { select: queryOptions?.select }],
+      queryKey: ["pylo", entity, "byId", id, { select: queryOptions?.select, headers: merged }],
       queryFn: async () => {
         const { query, variables } = buildByIdQuery(
           entity as string,
@@ -224,7 +237,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           metadata,
         );
 
-        const data = (await clientFetch(apiPath, query, variables)) as Record<
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
           string,
           { data: unknown } | null
         >;
@@ -243,9 +256,10 @@ export function createPyloHooks<S>(options: HooksOptions) {
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }, Error, UpsertInput<S, E>>,
       "mutationFn"
-    >,
+    > & RequestOptions,
   ): UseMutationResult<{ id: string }, Error, UpsertInput<S, E>> {
     const queryClient = useQueryClient();
+    const merged = mergeHeaders(globalHeaders, mutationOptions?.headers);
 
     return useMutation({
       ...mutationOptions,
@@ -261,7 +275,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           input as Record<string, unknown>,
         );
 
-        const data = (await clientFetch(apiPath, query, variables)) as Record<
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
           string,
           { data: { id: string } }
         >;
@@ -283,9 +297,10 @@ export function createPyloHooks<S>(options: HooksOptions) {
     mutationOptions?: Omit<
       UseMutationOptions<{ success: boolean }, Error, string[]>,
       "mutationFn"
-    >,
+    > & RequestOptions,
   ): UseMutationResult<{ success: boolean }, Error, string[]> {
     const queryClient = useQueryClient();
+    const merged = mergeHeaders(globalHeaders, mutationOptions?.headers);
 
     return useMutation({
       ...mutationOptions,
@@ -301,7 +316,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           ids,
         );
 
-        const data = (await clientFetch(apiPath, query, variables)) as Record<
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
           string,
           { data: { success: boolean } }
         >;

@@ -8,11 +8,13 @@ import { getAuthToken } from "@pylo/auth-nextjs/core";
 interface ApiRouteOptions {
   endpoint?: string;
   apiKey?: string;
+  headers?: Record<string, string>;
 }
 
 interface RequestBody {
   query?: string;
   variables?: Record<string, unknown>;
+  headers?: Record<string, string>;
 }
 
 function getEndpoint(options?: ApiRouteOptions): string {
@@ -56,12 +58,15 @@ export function createPyloApiRoute(options?: ApiRouteOptions) {
       );
     }
 
+    const mergedHeaders = { ...options?.headers, ...body.headers };
+    const hasHeaders = Object.keys(mergedHeaders).length > 0;
+
     try {
       const result = await graphqlRequest(
         endpoint,
         body.query,
         body.variables,
-        authOptions,
+        { ...authOptions, ...(hasHeaders ? { headers: mergedHeaders } : {}) },
       );
 
       if (hasErrors(result)) {

@@ -6,6 +6,7 @@ interface ServerOptions {
   endpoint?: string;
   schemaMetadata: SchemaMetadata;
   apiKey?: string;
+  headers?: Record<string, string>;
 }
 
 export type PyloServer<S> = PyloClient<S>;
@@ -23,6 +24,7 @@ export function createPyloServer<S>(options: ServerOptions): PyloServer<S> {
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
     schemaMetadata: options.schemaMetadata,
     auth,
+    ...(options.headers !== undefined ? { headers: options.headers } : {}),
   });
 }
 

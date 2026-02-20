@@ -87,4 +87,5 @@ export interface EntityMetadata {
 
 export interface SchemaMetadata {
   entities: Record<string, EntityMetadata>;
+  unknownFieldBehavior?: "error" | "ignore";
 }
