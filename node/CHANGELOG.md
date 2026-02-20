@@ -1,5 +1,13 @@
 # @pylo/node
 
+## 0.0.4
+
+### Patch Changes
+
+- see commit
+- Updated dependencies
+  - @pylo/core@0.0.6
+
 ## 0.0.3
 
 ### Patch Changes

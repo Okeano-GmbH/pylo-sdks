@@ -12,8 +12,14 @@ import { writeGeneratedFiles } from "./write.js";
 export { defineConfig } from "./config.js";
 export type { PyloConfig } from "./config.js";
 
-export async function generate(cwd?: string): Promise<void> {
-  const projectRoot = cwd ?? process.cwd();
+export interface GenerateOptions {
+  cwd?: string;
+  importSource?: string;
+}
+
+export async function generate(options?: GenerateOptions): Promise<void> {
+  const projectRoot = options?.cwd ?? process.cwd();
+  const importSource = options?.importSource ?? "@pylo/core";
 
   console.log("Loading config...");
   const config = await loadConfig(projectRoot);
@@ -29,9 +35,9 @@ export async function generate(cwd?: string): Promise<void> {
 
   console.log("Generating types...");
   const files: Record<string, string> = {
-    "index.ts": generateIndexFile(entities),
-    "entities.ts": generateEntitiesFile(entities),
-    "schema-metadata.ts": generateSchemaMetadataFile(entities, config.unknownFieldBehavior),
+    "index.ts": generateIndexFile(entities, importSource),
+    "entities.ts": generateEntitiesFile(entities, importSource),
+    "schema-metadata.ts": generateSchemaMetadataFile(entities, config.unknownFieldBehavior, importSource),
   };
 
   console.log(`Writing files to ${outputDir}...`);

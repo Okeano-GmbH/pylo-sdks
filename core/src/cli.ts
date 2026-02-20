@@ -4,7 +4,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 if (command === "generate") {
-  generate().catch((err: unknown) => {
+  generate({ importSource: "@pylo/core" }).catch((err: unknown) => {
     console.error(
       "Error:",
       err instanceof Error ? err.message : String(err),
