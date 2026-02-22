@@ -137,7 +137,8 @@ function createEntityClient<S, E extends EntityName<S>>(
         mergeHeaders(globalHeaders, options?.headers),
       );
 
-      const result = data[entityKey];
+      const byIdKey = `${entityKey}ById`;
+      const result = data[byIdKey];
       if (!result) return null as never;
 
       return result.data as never;

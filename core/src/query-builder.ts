@@ -218,7 +218,7 @@ export function buildByIdQuery(
     .join(", ");
 
   const query = `query ${capitalize(entityKey)}ById(${varDecls}) {
-  ${entityKey}(id: $id) {
+  ${entityKey}ById(id: $id) {
     data {
       ${selectionSet}
     }

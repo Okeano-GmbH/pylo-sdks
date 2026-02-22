@@ -242,7 +242,8 @@ export function createPyloHooks<S>(options: HooksOptions) {
           { data: unknown } | null
         >;
 
-        const result = data[entity as string];
+        const byIdKey = `${entity as string}ById`;
+        const result = data[byIdKey];
         if (!result) return null;
 
         return result.data as EntityResult<S, E, Sel>;

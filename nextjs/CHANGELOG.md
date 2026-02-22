@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.7
+
+### Patch Changes
+
+- fix by id query
+- Updated dependencies
+  - @pylo/core@0.0.7
+
 ## 0.0.6
 
 ### Patch Changes
