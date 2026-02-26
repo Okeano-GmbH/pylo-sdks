@@ -96,6 +96,28 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  node:
+    dependencies:
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
+    devDependencies:
+      '@pylo/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@pylo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.7
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(jiti@2.6.1)(postcss@8.4.31)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   node-utils:
     dependencies:
       graphql-request:

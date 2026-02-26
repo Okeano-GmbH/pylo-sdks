@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.0.8
+
+### Patch Changes
+
+- see commit
+
 ## 0.0.7
 
 ### Patch Changes

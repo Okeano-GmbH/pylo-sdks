@@ -1,6 +1,6 @@
 {
   "name": "@pylo/node",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Server-side Pylo SDK with API key authentication",
   "exports": {
     ".": {
@@ -27,9 +27,11 @@
     "dist"
   ],
   "dependencies": {
-    "@pylo/core": "workspace:*"
+    "jiti": "^2.6.1"
   },
   "devDependencies": {
+    "@pylo/core": "workspace:*",
+    "@pylo/auth": "workspace:*",
     "@types/node": "^22.15.21",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"

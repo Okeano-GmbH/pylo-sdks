@@ -1,5 +1,7 @@
 import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
 
+const VARIANT_TYPE = "{ variant: string; value: string }";
+
 function fieldTypeString(field: AnalyzedField): string {
   if (field.nullable) {
     return `${field.tsType} | null`;
@@ -15,10 +17,19 @@ function indent(text: string, level: number): string {
     .join("\n");
 }
 
+function getVariantFieldNames(entity: AnalyzedEntity): string[] {
+  return entity.fields
+    .filter((f) => f.variantFieldName !== null)
+    .map((f) => f.variantFieldName!);
+}
+
 function generateEntityFieldsType(entity: AnalyzedEntity): string {
   const lines = entity.fields.map(
     (f) => `${f.name}: ${fieldTypeString(f)};`,
   );
+  for (const variantName of getVariantFieldNames(entity)) {
+    lines.push(`${variantName}: ${VARIANT_TYPE}[] | null;`);
+  }
   return lines.join("\n");
 }
 
@@ -40,6 +51,10 @@ function generateCreateInputType(entity: AnalyzedEntity): string {
     lines.push(`${field.name}?: ${fieldTypeString(field)};`);
   }
 
+  for (const variantName of getVariantFieldNames(entity)) {
+    lines.push(`${variantName}?: ${VARIANT_TYPE}[];`);
+  }
+
   for (const rel of entity.relations) {
     for (const suffix of rel.suffixes) {
       lines.push(
@@ -56,13 +71,17 @@ function generateUpdateInputType(entity: AnalyzedEntity): string {
 
   lines.push("id?: string;");
   lines.push(
-    "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'skip' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };",
+    "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };",
   );
 
   for (const field of entity.fields) {
     if (field.name === "id" || field.name === "integer_id") continue;
     if (field.name === "created_at" || field.name === "updated_at") continue;
     lines.push(`${field.name}?: ${fieldTypeString(field)};`);
+  }
+
+  for (const variantName of getVariantFieldNames(entity)) {
+    lines.push(`${variantName}?: ${VARIANT_TYPE}[];`);
   }
 
   for (const rel of entity.relations) {
@@ -148,6 +167,9 @@ export function generateEntitiesFile(entities: AnalyzedEntity[], importSource: s
     for (const field of entity.fields) {
       lines.push(`  ${field.name}: ${fieldTypeString(field)};`);
     }
+    for (const variantName of getVariantFieldNames(entity)) {
+      lines.push(`  ${variantName}: ${VARIANT_TYPE}[] | null;`);
+    }
     for (const rel of entity.relations) {
       if (rel.type === "hasOne") {
         lines.push(`  ${rel.fieldName}?: { data: ${rel.targetEntityPascalName} } | null;`);
@@ -184,6 +206,12 @@ export function generateSchemaMetadataFile(
 
     const scalarNames = entity.fields.map((f) => `'${f.name}'`).join(", ");
     lines.push(`      scalarFieldNames: [${scalarNames}],`);
+
+    const variantNames = getVariantFieldNames(entity);
+    if (variantNames.length > 0) {
+      const variantNamesStr = variantNames.map((n) => `'${n}'`).join(", ");
+      lines.push(`      variantFieldNames: [${variantNamesStr}],`);
+    }
 
     lines.push("      relations: {");
     for (const rel of entity.relations) {

@@ -66,7 +66,7 @@ export interface PaginationData {
 export interface SearchValueInput {
   field: string;
   value?: string;
-  not_found_behavior?: "create" | "skip" | "error";
+  not_found_behavior?: "create" | "ignore" | "error";
   search_in_all_field_variants?: boolean;
   multiple_results_allowed?: boolean;
   multiple_results_use_latest?: boolean;
@@ -75,6 +75,7 @@ export interface SearchValueInput {
 export interface EntityMetadata {
   pascalName: string;
   scalarFieldNames: string[];
+  variantFieldNames?: string[];
   relations: Record<
     string,
     {

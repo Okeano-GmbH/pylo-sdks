@@ -44,9 +44,14 @@ function buildSelectionSet(
 ): string {
   const fields: string[] = [];
 
+  const variantFieldNames = entityMeta.variantFieldNames ?? [];
+
   if (!select) {
-    // No select → all scalar fields
+    // No select → all scalar fields + variant fields
     fields.push(...entityMeta.scalarFieldNames);
+    for (const vf of variantFieldNames) {
+      fields.push(`${vf} { data { value variant } }`);
+    }
     return fields.join("\n    ");
   }
 
@@ -59,11 +64,19 @@ function buildSelectionSet(
       continue;
     }
 
+    // Check if it's a variant field
+    if (variantFieldNames.includes(key)) {
+      if (value === true) {
+        fields.push(`${key} { data { value variant } }`);
+      }
+      continue;
+    }
+
     // Check if it's a relation
     const relation = entityMeta.relations[key];
     if (!relation) {
       if (schemaMetadata.unknownFieldBehavior === "ignore") continue;
-      const validFields = entityMeta.scalarFieldNames.join(", ");
+      const validFields = [...entityMeta.scalarFieldNames, ...variantFieldNames].join(", ");
       const validRelations = Object.keys(entityMeta.relations).join(", ");
       throw new Error(
         `Unknown field "${key}" on entity "${entityMeta.pascalName}". Valid fields: ${validFields}. Valid relations: ${validRelations}`,
@@ -76,8 +89,12 @@ function buildSelectionSet(
     const isHasMany = relation.type === "hasMany";
 
     if (value === true) {
-      // Fetch all scalar fields of target
-      const targetFields = targetMeta.scalarFieldNames.join(" ");
+      // Fetch all scalar fields + variant fields of target
+      const targetFieldParts = [...targetMeta.scalarFieldNames];
+      for (const vf of targetMeta.variantFieldNames ?? []) {
+        targetFieldParts.push(`${vf} { data { value variant } }`);
+      }
+      const targetFields = targetFieldParts.join(" ");
       if (isHasMany) {
         fields.push(`${key} { data { ${targetFields} } ${PAGINATION_FIELDS} }`);
       } else {

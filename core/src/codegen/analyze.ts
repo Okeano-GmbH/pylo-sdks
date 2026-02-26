@@ -4,6 +4,7 @@ export interface AnalyzedField {
   name: string;
   tsType: string;
   nullable: boolean;
+  variantFieldName: string | null;
 }
 
 export interface AnalyzedRelation {
@@ -78,10 +79,12 @@ function toEntityKey(pascalName: string): string {
 }
 
 function analyzeField(field: RawEntityField): AnalyzedField {
+  const hasVariants = field.variant_entity_field?.data?.name != null;
   return {
     name: field.name,
     tsType: mapDataType(field.data_type),
     nullable: isNullable(field),
+    variantFieldName: hasVariants ? `${field.name}_variants` : null,
   };
 }
 
