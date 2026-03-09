@@ -1,5 +1,11 @@
 # @pylo/node
 
+## 0.0.7
+
+### Patch Changes
+
+- fix types for \_set types
+
 ## 0.0.6
 
 ### Patch Changes

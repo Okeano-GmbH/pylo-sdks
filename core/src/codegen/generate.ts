@@ -57,8 +57,11 @@ function generateCreateInputType(entity: AnalyzedEntity): string {
 
   for (const rel of entity.relations) {
     for (const suffix of rel.suffixes) {
+      const valueType = rel.type === "hasMany"
+        ? "Record<string, unknown>[]"
+        : "Record<string, unknown>";
       lines.push(
-        `${rel.fieldName}${suffix}?: Record<string, unknown>;`,
+        `${rel.fieldName}${suffix}?: ${valueType};`,
       );
     }
   }
@@ -86,8 +89,11 @@ function generateUpdateInputType(entity: AnalyzedEntity): string {
 
   for (const rel of entity.relations) {
     for (const suffix of rel.suffixes) {
+      const valueType = rel.type === "hasMany"
+        ? "Record<string, unknown>[]"
+        : "Record<string, unknown>";
       lines.push(
-        `${rel.fieldName}${suffix}?: Record<string, unknown>;`,
+        `${rel.fieldName}${suffix}?: ${valueType};`,
       );
     }
   }

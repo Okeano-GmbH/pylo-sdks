@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.0.9
+
+### Patch Changes
+
+- fix types for \_set types
+
 ## 0.0.8
 
 ### Patch Changes
