@@ -42,11 +42,27 @@ export interface AuthContext {
 }
 
 /**
+ * Error thrown by requireAuth when mode is "throw" and the user is not authenticated.
+ */
+export class NotAuthenticatedError extends Error {
+  constructor(message = "Not authenticated") {
+    super(message);
+    this.name = "NotAuthenticatedError";
+  }
+}
+
+/**
  * Options for requireAuth
  */
 export interface RequireAuthOptions {
   /** Path to redirect to when not authenticated. Default: '/auth/login' */
   redirectTo?: string;
+  /**
+   * How to handle unauthenticated requests.
+   * - "redirect" (default): Redirect to the login page. Use in Server Components / pages.
+   * - "throw": Throw a NotAuthenticatedError. Use in API Route Handlers.
+   */
+  mode?: "redirect" | "throw";
 }
 
 /**

@@ -8,6 +8,9 @@ export type {
   RequireAuthOptions,
 } from "./types.js";
 
+// Export error class
+export { NotAuthenticatedError } from "./types.js";
+
 // Middleware
 export { pyloAuth, createPyloProxy } from "./middleware.js";
 

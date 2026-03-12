@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.10
+
+### Patch Changes
+
+- support for next js api route import
+- Updated dependencies
+  - @pylo/auth-nextjs@0.1.3
+
 ## 0.0.9
 
 ### Patch Changes

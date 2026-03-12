@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation.js";
 import {
   graphqlRequest,
   hasErrors,
@@ -14,6 +13,7 @@ import {
   type MeResponse,
 } from "@pylo/auth";
 import type { RequireAuthOptions } from "./types.js";
+import { NotAuthenticatedError } from "./types.js";
 import { getAuthToken, getRefreshToken, setAuthCookies, clearAuthCookies } from "./cookies.js";
 
 const getEndpoint = (): string =>
@@ -87,17 +87,29 @@ export async function loggedIn(): Promise<boolean> {
 }
 
 /**
- * Get the user or redirect to login if not authenticated.
- * Use this when you know the page requires authentication.
+ * Get the user or handle unauthenticated requests.
  *
- * @example
+ * Supports two modes:
+ * - `"redirect"` (default): Redirects to the login page. Use in Server Components / pages.
+ * - `"throw"`: Throws a `NotAuthenticatedError`. Use in API Route Handlers.
+ *
+ * @example Server Component (default redirect mode)
  * ```ts
- * import { requireAuth } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { requireAuth } from '@pylo/auth-nextjs'
  *
  * export default async function DashboardPage() {
  *   const user = await requireAuth()
- *   // User is guaranteed to exist here
  *   return <Dashboard user={user} />
+ * }
+ * ```
+ *
+ * @example API Route Handler (throw mode)
+ * ```ts
+ * import { requireAuth } from '@pylo/auth-nextjs'
+ *
+ * export async function GET() {
+ *   const user = await requireAuth({ mode: "throw" })
+ *   return Response.json({ user })
  * }
  * ```
  */
@@ -105,8 +117,18 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<PyloUse
   const user = await getUser();
 
   if (!user) {
+    if (options?.mode === "throw") {
+      throw new NotAuthenticatedError();
+    }
+
+    // Lazy import to avoid pulling in next/navigation at module parse time,
+    // which fails in Route Handlers where app-router-context is unavailable.
+    const nav = await import("next/navigation.js");
     const redirectTo = options?.redirectTo ?? "/auth/login";
-    redirect(redirectTo);
+    nav.redirect(redirectTo);
+    // redirect() throws internally and never returns, but TS doesn't know that
+    // from a dynamic import. This line is unreachable.
+    throw new Error("Unreachable");
   }
 
   return user;

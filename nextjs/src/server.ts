@@ -1,6 +1,6 @@
 import { createPyloClient, PyloError } from "@pylo/core";
 import type { PyloClient, SchemaMetadata } from "@pylo/core";
-import { getAuthToken } from "@pylo/auth-nextjs";
+import { getAuthToken } from "@pylo/auth-nextjs/core";
 
 interface ServerOptions {
   endpoint?: string;
