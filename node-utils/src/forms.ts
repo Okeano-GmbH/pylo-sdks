@@ -103,6 +103,10 @@ export function parseFormField(formField: PyloFormField) {
     if (split.includes("required")) {
       additionalProps.required = true;
     }
+    const minRule = split.find((v) => v.startsWith("min:"));
+    const maxRule = split.find((v) => v.startsWith("max:"));
+    if (minRule) additionalProps.min = parseInt(minRule.split(":")[1] ?? "0");
+    if (maxRule) additionalProps.max = parseInt(maxRule.split(":")[1] ?? "0");
     for (const v of split) {
       if (v.startsWith("regex:")) {
         additionalProps.regex = v.replace(/^regex:/, "");
