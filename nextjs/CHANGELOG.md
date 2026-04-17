@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.11
+
+### Patch Changes
+
+- feat: adds support for enum fields
+- Updated dependencies
+  - @pylo/core@0.0.10
+
 ## 0.0.10
 
 ### Patch Changes

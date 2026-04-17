@@ -5,6 +5,7 @@ export interface AnalyzedField {
   tsType: string;
   nullable: boolean;
   variantFieldName: string | null;
+  enum: { typeName: string; values: string[] } | null;
 }
 
 export interface AnalyzedRelation {
@@ -78,13 +79,39 @@ function toEntityKey(pascalName: string): string {
   return pascalName.charAt(0).toLowerCase() + pascalName.slice(1);
 }
 
-function analyzeField(field: RawEntityField): AnalyzedField {
+function toPascalCase(snake: string): string {
+  return snake
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function analyzeField(
+  field: RawEntityField,
+  entityPascalName: string,
+): AnalyzedField {
   const hasVariants = field.variant_entity_field?.data?.name != null;
+  const enumValues = field.entity_field_enum_values?.data ?? [];
+
+  if (enumValues.length > 0) {
+    const typeName = `${entityPascalName}${toPascalCase(field.name)}`;
+    const values = enumValues.map((v) => v.value);
+    return {
+      name: field.name,
+      tsType: typeName,
+      nullable: isNullable(field),
+      variantFieldName: hasVariants ? `${field.name}_variants` : null,
+      enum: { typeName, values },
+    };
+  }
+
   return {
     name: field.name,
     tsType: mapDataType(field.data_type),
     nullable: isNullable(field),
     variantFieldName: hasVariants ? `${field.name}_variants` : null,
+    enum: null,
   };
 }
 
@@ -125,7 +152,9 @@ function analyzeReverseRelation(relation: RawEntityRelation): AnalyzedRelation |
 
 export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
   return rawEntities.map((entity) => {
-    const fields = (entity.entity_fields?.data ?? []).map(analyzeField);
+    const fields = (entity.entity_fields?.data ?? []).map((f) =>
+      analyzeField(f, entity.name),
+    );
 
     const forwardRelations = (entity.entity_relations?.data ?? [])
       .map(analyzeRelation)

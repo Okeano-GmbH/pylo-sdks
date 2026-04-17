@@ -76,6 +76,7 @@ export interface EntityMetadata {
   pascalName: string;
   scalarFieldNames: string[];
   variantFieldNames?: string[];
+  enumFields?: Record<string, string[]>;
   relations: Record<
     string,
     {

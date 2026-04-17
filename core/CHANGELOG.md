@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.0.10
+
+### Patch Changes
+
+- feat: adds support for enum fields
+
 ## 0.0.9
 
 ### Patch Changes

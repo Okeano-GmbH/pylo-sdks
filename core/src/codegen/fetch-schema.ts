@@ -43,6 +43,11 @@ query PyloSchemaFetch($pagination: PaginationInput) {
               name
             }
           }
+          entity_field_enum_values {
+            data {
+              value
+            }
+          }
         }
       }
       entity_relations {
@@ -95,6 +100,9 @@ export interface RawEntityField {
   default_value: string | null;
   variant_entity_field: {
     data: { name: string } | null;
+  } | null;
+  entity_field_enum_values: {
+    data: Array<{ value: string }>;
   } | null;
 }
 

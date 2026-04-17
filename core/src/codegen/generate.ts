@@ -101,6 +101,20 @@ function generateUpdateInputType(entity: AnalyzedEntity): string {
   return lines.join("\n");
 }
 
+function collectEnumTypes(
+  entities: AnalyzedEntity[],
+): Array<{ typeName: string; values: string[] }> {
+  const seen = new Map<string, string[]>();
+  for (const entity of entities) {
+    for (const field of entity.fields) {
+      if (field.enum && !seen.has(field.enum.typeName)) {
+        seen.set(field.enum.typeName, field.enum.values);
+      }
+    }
+  }
+  return Array.from(seen, ([typeName, values]) => ({ typeName, values }));
+}
+
 export function generateIndexFile(entities: AnalyzedEntity[], importSource: string): string {
   const lines: string[] = [];
 
@@ -122,6 +136,16 @@ export function generateIndexFile(entities: AnalyzedEntity[], importSource: stri
     `} from '${importSource}';`,
     "",
   );
+
+  // Enum type aliases
+  const enumTypes = collectEnumTypes(entities);
+  if (enumTypes.length > 0) {
+    for (const { typeName, values } of enumTypes) {
+      const union = values.map((v) => `'${v}'`).join(" | ");
+      lines.push(`export type ${typeName} = ${union};`);
+    }
+    lines.push("");
+  }
 
   // Generate create/update input types for each entity
   for (const entity of entities) {
@@ -217,6 +241,16 @@ export function generateSchemaMetadataFile(
     if (variantNames.length > 0) {
       const variantNamesStr = variantNames.map((n) => `'${n}'`).join(", ");
       lines.push(`      variantFieldNames: [${variantNamesStr}],`);
+    }
+
+    const enumFields = entity.fields.filter((f) => f.enum !== null);
+    if (enumFields.length > 0) {
+      lines.push("      enumFields: {");
+      for (const f of enumFields) {
+        const vals = f.enum!.values.map((v) => `'${v}'`).join(", ");
+        lines.push(`        ${f.name}: [${vals}],`);
+      }
+      lines.push("      },");
     }
 
     lines.push("      relations: {");
