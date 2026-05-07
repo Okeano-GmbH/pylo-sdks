@@ -1,5 +1,11 @@
 # @pylo/node
 
+## 0.0.9
+
+### Patch Changes
+
+- 47d3886: adds option for dry run and do not trigger flows to sdk
+
 ## 0.0.8
 
 ### Patch Changes

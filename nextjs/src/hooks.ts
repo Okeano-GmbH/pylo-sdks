@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery, mergeHeaders } from "@pylo/core";
+import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders } from "@pylo/core";
 import { buildUpsertMutation, buildDeleteMutation } from "@pylo/core";
 import type {
   SchemaMetadata,
@@ -25,6 +25,7 @@ import type {
   UpsertInput,
   StrictSelect,
   RequestOptions,
+  MutationRequestOptions,
 } from "@pylo/core";
 
 interface HooksOptions {
@@ -257,10 +258,14 @@ export function createPyloHooks<S>(options: HooksOptions) {
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }, Error, UpsertInput<S, E>>,
       "mutationFn"
-    > & RequestOptions,
+    > & MutationRequestOptions,
   ): UseMutationResult<{ id: string }, Error, UpsertInput<S, E>> {
     const queryClient = useQueryClient();
-    const merged = mergeHeaders(globalHeaders, mutationOptions?.headers);
+    const merged = mergeHeaders(
+      mergeHeaders(globalHeaders, mutationOptions?.headers),
+      flagsToHeaders(mutationOptions ?? {}),
+    );
+    const isDryRun = mutationOptions?.dryRun === true;
 
     return useMutation({
       ...mutationOptions,
@@ -285,9 +290,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
         return data[mutationKey]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
-        void queryClient.invalidateQueries({
-          queryKey: ["pylo", entity],
-        });
+        if (!isDryRun) {
+          void queryClient.invalidateQueries({
+            queryKey: ["pylo", entity],
+          });
+        }
         mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
       },
     });
@@ -298,10 +305,14 @@ export function createPyloHooks<S>(options: HooksOptions) {
     mutationOptions?: Omit<
       UseMutationOptions<{ success: boolean }, Error, string[]>,
       "mutationFn"
-    > & RequestOptions,
+    > & MutationRequestOptions,
   ): UseMutationResult<{ success: boolean }, Error, string[]> {
     const queryClient = useQueryClient();
-    const merged = mergeHeaders(globalHeaders, mutationOptions?.headers);
+    const merged = mergeHeaders(
+      mergeHeaders(globalHeaders, mutationOptions?.headers),
+      flagsToHeaders(mutationOptions ?? {}),
+    );
+    const isDryRun = mutationOptions?.dryRun === true;
 
     return useMutation({
       ...mutationOptions,
@@ -326,9 +337,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
         return data[mutationKey]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
-        void queryClient.invalidateQueries({
-          queryKey: ["pylo", entity],
-        });
+        if (!isDryRun) {
+          void queryClient.invalidateQueries({
+            queryKey: ["pylo", entity],
+          });
+        }
         mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
       },
     });

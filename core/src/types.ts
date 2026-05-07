@@ -215,3 +215,12 @@ export interface ListResult<T> {
 export interface RequestOptions {
   headers?: Record<string, string>;
 }
+
+// Mutation-only transport options. Mutations accept the same `headers` as
+// reads, plus typed flags that map to Pylo-specific request headers:
+// - `dryRun: true`     → `pylo-dry-run: 1`              (backend rolls back the transaction)
+// - `doNotTriggerFlows: true` → `pylo-do-not-trigger-flow: 1` (suppresses downstream automation flows)
+export interface MutationRequestOptions extends RequestOptions {
+  dryRun?: boolean;
+  doNotTriggerFlows?: boolean;
+}

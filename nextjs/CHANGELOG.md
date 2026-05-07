@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.12
+
+### Patch Changes
+
+- 47d3886: adds option for dry run and do not trigger flows to sdk
+- Updated dependencies [47d3886]
+  - @pylo/core@0.0.11
+
 ## 0.0.11
 
 ### Patch Changes

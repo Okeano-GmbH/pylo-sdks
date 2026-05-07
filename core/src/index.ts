@@ -26,6 +26,7 @@ export type {
   ByIdOptions,
   ListResult,
   RequestOptions,
+  MutationRequestOptions,
 } from "./types.js";
 
 // Query & mutation builders
@@ -39,6 +40,9 @@ export { mergeHeaders } from "@pylo/auth";
 export {
   PyloError,
   createPyloClient,
+  flagsToHeaders,
+  PYLO_DRY_RUN_HEADER,
+  PYLO_DO_NOT_TRIGGER_FLOWS_HEADER,
 } from "./client.js";
 
 export type {

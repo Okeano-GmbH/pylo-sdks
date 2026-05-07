@@ -1,6 +1,6 @@
 {
   "name": "@pylo/node",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Server-side Pylo SDK with API key authentication",
   "exports": {
     ".": {

@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.0.11
+
+### Patch Changes
+
+- 47d3886: adds option for dry run and do not trigger flows to sdk
+
 ## 0.0.10
 
 ### Patch Changes

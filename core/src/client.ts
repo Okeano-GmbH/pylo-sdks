@@ -17,7 +17,22 @@ import type {
   ListResult,
   UpsertInput,
   RequestOptions,
+  MutationRequestOptions,
 } from "./types.js";
+
+export const PYLO_DRY_RUN_HEADER = "pylo-dry-run";
+export const PYLO_DO_NOT_TRIGGER_FLOWS_HEADER = "pylo-do-not-trigger-flow";
+
+export function flagsToHeaders(flags: {
+  dryRun?: boolean;
+  doNotTriggerFlows?: boolean;
+}): Record<string, string> | undefined {
+  if (!flags.dryRun && !flags.doNotTriggerFlows) return undefined;
+  const headers: Record<string, string> = {};
+  if (flags.dryRun) headers[PYLO_DRY_RUN_HEADER] = "1";
+  if (flags.doNotTriggerFlows) headers[PYLO_DO_NOT_TRIGGER_FLOWS_HEADER] = "1";
+  return headers;
+}
 
 export class PyloError extends Error {
   graphqlErrors: unknown;
@@ -48,9 +63,9 @@ export interface EntityClient<S, E extends EntityName<S>> {
     options?: ByIdOptions<S, E, Sel> & RequestOptions,
   ): Promise<EntityResult<S, E, Sel> | null>;
 
-  upsert(input: UpsertInput<S, E>, options?: RequestOptions): Promise<{ id: string }>;
+  upsert(input: UpsertInput<S, E>, options?: MutationRequestOptions): Promise<{ id: string }>;
 
-  delete(ids: string[], options?: RequestOptions): Promise<{ success: boolean }>;
+  delete(ids: string[], options?: MutationRequestOptions): Promise<{ success: boolean }>;
 }
 
 export type PyloClient<S> = {
@@ -161,7 +176,10 @@ function createEntityClient<S, E extends EntityName<S>>(
         query,
         variables,
         auth,
-        mergeHeaders(globalHeaders, options?.headers),
+        mergeHeaders(
+          mergeHeaders(globalHeaders, options?.headers),
+          flagsToHeaders(options ?? {}),
+        ),
       );
 
       const mutationKey = `update${entityMeta.pascalName}`;
@@ -190,7 +208,10 @@ function createEntityClient<S, E extends EntityName<S>>(
         query,
         variables,
         auth,
-        mergeHeaders(globalHeaders, options?.headers),
+        mergeHeaders(
+          mergeHeaders(globalHeaders, options?.headers),
+          flagsToHeaders(options ?? {}),
+        ),
       );
 
       const mutationKey = `delete${entityMeta.pascalName}`;
