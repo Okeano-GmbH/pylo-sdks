@@ -1,5 +1,13 @@
 # @pylo/core
 
+## 0.0.12
+
+### Patch Changes
+
+- fix ts error
+- Updated dependencies
+  - @pylo/auth@0.0.5
+
 ## 0.0.11
 
 ### Patch Changes

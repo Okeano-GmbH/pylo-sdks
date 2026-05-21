@@ -1,6 +1,6 @@
 {
   "name": "@pylo/core",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Core entity client, types, query builders, and codegen for Pylo SDKs",
   "type": "module",
   "bin": {
