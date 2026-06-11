@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.14
+
+### Patch Changes
+
+- adds functions for ingesting events in pylo
+- Updated dependencies
+  - @pylo/core@0.0.13
+
 ## 0.0.13
 
 ### Patch Changes

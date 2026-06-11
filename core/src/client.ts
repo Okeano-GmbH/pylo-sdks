@@ -11,7 +11,6 @@ import {
   buildDeleteMutation,
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
-import { serializeJsonFields, parseJsonFields } from "./json-fields.js";
 import type {
   SchemaMetadata,
   PaginationData,

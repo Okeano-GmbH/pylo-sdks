@@ -1,6 +1,6 @@
 {
   "name": "@pylo/nextjs",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Type-safe Next.js SDK for Pylo — server client, React Query hooks, API route handler",
   "type": "module",
   "bin": {
@@ -31,7 +31,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",
@@ -62,6 +63,16 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "license": "ISC",
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/nextjs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "nextjs"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
   "packageManager": "pnpm@10.12.1"
 }

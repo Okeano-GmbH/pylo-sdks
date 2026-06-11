@@ -1,6 +1,6 @@
 {
   "name": "@pylo/core",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "Core entity client, types, query builders, and codegen for Pylo SDKs",
   "type": "module",
   "bin": {
@@ -25,7 +25,8 @@
     "prepublishOnly": "pnpm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "dependencies": {
     "@pylo/auth": "workspace:*",
@@ -36,6 +37,16 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "license": "ISC",
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "core"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
   "packageManager": "pnpm@10.12.1"
 }

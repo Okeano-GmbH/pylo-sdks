@@ -23,7 +23,8 @@
     "prepublishOnly": "pnpm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "keywords": [
     "pylo",
@@ -31,7 +32,17 @@
     "authentication",
     "nextjs"
   ],
-  "license": "ISC",
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/auth-nextjs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "auth-nextjs"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
   "packageManager": "pnpm@10.12.1",
   "peerDependencies": {
     "next": ">=14.0.0"

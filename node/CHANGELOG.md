@@ -1,5 +1,11 @@
 # @pylo/node
 
+## 0.0.11
+
+### Patch Changes
+
+- adds functions for ingesting events in pylo
+
 ## 0.0.10
 
 ### Patch Changes

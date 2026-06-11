@@ -1,6 +1,6 @@
 {
   "name": "@pylo/node",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Server-side Pylo SDK with API key authentication",
   "exports": {
     ".": {
@@ -24,7 +24,8 @@
     "prepublishOnly": "pnpm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "dependencies": {
     "jiti": "^2.6.1"
@@ -36,6 +37,16 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "license": "ISC",
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "node"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
   "packageManager": "pnpm@10.12.1"
 }

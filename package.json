@@ -1,4 +1,6 @@
 {
+	"private": true,
+	"license": "MIT",
 	"scripts": {
 		"changeset": "changeset",
 		"write:versions": "changeset version",

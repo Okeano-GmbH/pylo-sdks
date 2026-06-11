@@ -13,11 +13,25 @@
     "registry": "https://npm.pkg.github.com"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "pylo",
+    "graphql",
+    "utils"
+  ],
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/node-utils#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "node-utils"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
   "packageManager": "pnpm@10.12.1",
   "devDependencies": {
     "tsup": "^8.5.1",
