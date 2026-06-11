@@ -12,10 +12,16 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders } from "@pylo/core";
-import { buildUpsertMutation, buildDeleteMutation } from "@pylo/core";
+import {
+  buildUpsertMutation,
+  buildDeleteMutation,
+  buildIngestEventsMutation,
+} from "@pylo/core";
 import type {
   SchemaMetadata,
   PaginationData,
+  PyloEvent,
+  PyloEventInput,
   FilterInput,
   EntityName,
   EntitySelect,
@@ -347,11 +353,40 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
+  // Event names are namespaced under "custom." by the backend (the prefix is
+  // added if missing) and `ts` is server-generated.
+  function usePyloIngestEvents(
+    mutationOptions?: Omit<
+      UseMutationOptions<PyloEvent[], Error, PyloEventInput[]>,
+      "mutationFn"
+    > & MutationRequestOptions,
+  ): UseMutationResult<PyloEvent[], Error, PyloEventInput[]> {
+    const merged = mergeHeaders(
+      mergeHeaders(globalHeaders, mutationOptions?.headers),
+      flagsToHeaders(mutationOptions ?? {}),
+    );
+
+    return useMutation({
+      ...mutationOptions,
+      mutationFn: async (events: PyloEventInput[]) => {
+        const { query, variables } = buildIngestEventsMutation(events);
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          { data: PyloEvent[] }
+        >;
+
+        return data["ingestPyloEventData"]!.data;
+      },
+    });
+  }
+
   return {
     usePyloList,
     usePyloInfiniteList,
     usePyloById,
     usePyloUpsert,
     usePyloDelete,
+    usePyloIngestEvents,
   };
 }

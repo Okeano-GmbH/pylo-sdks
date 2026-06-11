@@ -1,3 +1,5 @@
+import type { PyloEventInput } from "./shared-types.js";
+
 interface BuildResult {
   query: string;
   variables: Record<string, unknown>;
@@ -38,5 +40,22 @@ export function buildDeleteMutation(
   return {
     query: mutation,
     variables: { ids },
+  };
+}
+
+export function buildIngestEventsMutation(events: PyloEventInput[]): BuildResult {
+  const mutation = `mutation IngestPyloEventData($input: [PyloEventInput!]!) {
+  ingestPyloEventData(input: $input) {
+    data {
+      event_name
+      ts
+      properties
+    }
+  }
+}`;
+
+  return {
+    query: mutation,
+    variables: { input: events },
   };
 }

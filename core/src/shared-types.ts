@@ -1,6 +1,11 @@
 // Shared types used by both codegen output and runtime SDK.
 // These never change per schema.
 
+// Mutation field suffixes for relations. hasOne relations only support `_set`;
+// hasMany relations support all three.
+export const RELATION_SUFFIXES = ["_set", "_connect", "_disconnect"] as const;
+export type RelationSuffix = (typeof RELATION_SUFFIXES)[number];
+
 export type QueryOperator =
   | "equal"
   | "notEqual"
@@ -72,10 +77,24 @@ export interface SearchValueInput {
   multiple_results_use_latest?: boolean;
 }
 
+// Event ingestion. The backend namespaces all ingested events under
+// "custom." (a missing prefix is added server-side) and generates `ts` itself.
+export interface PyloEventInput {
+  event_name: string;
+  properties: Record<string, unknown>;
+}
+
+export interface PyloEvent {
+  event_name: string;
+  ts: string;
+  properties: Record<string, unknown>;
+}
+
 export interface EntityMetadata {
   pascalName: string;
   scalarFieldNames: string[];
   variantFieldNames?: string[];
+  jsonFieldNames?: string[];
   enumFields?: Record<string, string[]>;
   relations: Record<
     string,

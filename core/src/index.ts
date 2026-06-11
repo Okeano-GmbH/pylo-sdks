@@ -11,6 +11,8 @@ export type {
   SearchValueInput,
   EntityMetadata,
   SchemaMetadata,
+  PyloEvent,
+  PyloEventInput,
 } from "./shared-types.js";
 
 // SDK type system
@@ -31,7 +33,11 @@ export type {
 
 // Query & mutation builders
 export { buildListQuery, buildByIdQuery } from "./query-builder.js";
-export { buildUpsertMutation, buildDeleteMutation } from "./mutation-builder.js";
+export {
+  buildUpsertMutation,
+  buildDeleteMutation,
+  buildIngestEventsMutation,
+} from "./mutation-builder.js";
 
 // Header utilities
 export { mergeHeaders } from "@pylo/auth";
@@ -49,6 +55,7 @@ export type {
   AuthProvider,
   ClientOptions,
   EntityClient,
+  IngestEvents,
   PyloClient,
 } from "./client.js";
 

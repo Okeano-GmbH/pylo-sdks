@@ -6,8 +6,18 @@ import {
   mergeHeaders,
 } from "@pylo/auth";
 import { buildListQuery, buildByIdQuery } from "./query-builder.js";
-import { buildUpsertMutation, buildDeleteMutation } from "./mutation-builder.js";
-import type { SchemaMetadata, PaginationData } from "./shared-types.js";
+import {
+  buildUpsertMutation,
+  buildDeleteMutation,
+  buildIngestEventsMutation,
+} from "./mutation-builder.js";
+import { serializeJsonFields, parseJsonFields } from "./json-fields.js";
+import type {
+  SchemaMetadata,
+  PaginationData,
+  PyloEvent,
+  PyloEventInput,
+} from "./shared-types.js";
 import type {
   EntityName,
   EntitySelect,
@@ -68,8 +78,19 @@ export interface EntityClient<S, E extends EntityName<S>> {
   delete(ids: string[], options?: MutationRequestOptions): Promise<{ success: boolean }>;
 }
 
+// Ingests custom events. Event names are namespaced under "custom." by the
+// backend (the prefix is added if missing) and `ts` is server-generated.
+// "ingestEvents" is a reserved key on the client — it shadows any entity of
+// the same name.
+export type IngestEvents = (
+  events: PyloEventInput[],
+  options?: MutationRequestOptions,
+) => Promise<PyloEvent[]>;
+
 export type PyloClient<S> = {
   [E in EntityName<S>]: EntityClient<S, E>;
+} & {
+  ingestEvents: IngestEvents;
 };
 
 function getEndpoint(endpoint?: string): string {
@@ -225,15 +246,46 @@ function createEntityClient<S, E extends EntityName<S>>(
   };
 }
 
+function createIngestEvents(
+  endpoint: string,
+  auth: AuthProvider,
+  globalHeaders?: Record<string, string>,
+): IngestEvents {
+  return async (events, options) => {
+    const { query, variables } = buildIngestEventsMutation(events);
+
+    const data = await executeGraphQL<Record<string, { data: PyloEvent[] }>>(
+      endpoint,
+      query,
+      variables,
+      auth,
+      mergeHeaders(
+        mergeHeaders(globalHeaders, options?.headers),
+        flagsToHeaders(options ?? {}),
+      ),
+    );
+
+    const result = data["ingestPyloEventData"];
+    if (!result) {
+      throw new PyloError("Unexpected response shape — missing ingestPyloEventData");
+    }
+
+    return result.data;
+  };
+}
+
 export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const endpoint = getEndpoint(options.endpoint);
   const metadata = options.schemaMetadata;
   const auth = options.auth;
   const globalHeaders = options.headers;
 
+  const ingestEvents = createIngestEvents(endpoint, auth, globalHeaders);
+
   return new Proxy({} as PyloClient<S>, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
+      if (prop === "ingestEvents") return ingestEvents;
       return createEntityClient<S, EntityName<S>>(prop, endpoint, metadata, auth, globalHeaders);
     },
   });

@@ -30,6 +30,8 @@ export type {
   SearchValueInput,
   EntityMetadata,
   SchemaMetadata,
+  PyloEvent,
+  PyloEventInput,
   EntityName,
   EntityFields,
   EntityRelations,
@@ -41,9 +43,11 @@ export type {
   ByIdOptions,
   ListResult,
   RequestOptions,
+  MutationRequestOptions,
   AuthProvider,
   ClientOptions,
   EntityClient,
+  IngestEvents,
   PyloClient,
 } from "@pylo/core";
 
