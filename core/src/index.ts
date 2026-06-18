@@ -13,6 +13,17 @@ export type {
   SchemaMetadata,
   PyloEvent,
   PyloEventInput,
+  AggregateFunction,
+  AggregateInput,
+  TimeBucketInput,
+  DimensionInput,
+  EventListFilterInput,
+  EventListOptions,
+  PyloEventListResult,
+  PyloEventProperty,
+  PyloEventFieldValue,
+  PyloEventPropertyKeysOptions,
+  PyloEventFieldValuesOptions,
 } from "./shared-types.js";
 
 // SDK type system
@@ -32,7 +43,13 @@ export type {
 } from "./types.js";
 
 // Query & mutation builders
-export { buildListQuery, buildByIdQuery } from "./query-builder.js";
+export {
+  buildListQuery,
+  buildByIdQuery,
+  buildEventListQuery,
+  buildEventPropertyKeysQuery,
+  buildEventFieldValuesQuery,
+} from "./query-builder.js";
 export {
   buildUpsertMutation,
   buildDeleteMutation,
@@ -56,6 +73,7 @@ export type {
   ClientOptions,
   EntityClient,
   IngestEvents,
+  EventsClient,
   PyloClient,
 } from "./client.js";
 

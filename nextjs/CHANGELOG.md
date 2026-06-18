@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.0.15
+
+### Patch Changes
+
+- adds option to list pylo event data
+- Updated dependencies
+  - @pylo/core@0.0.14
+
 ## 0.0.14
 
 ### Patch Changes

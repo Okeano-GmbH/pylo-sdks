@@ -1,5 +1,11 @@
 # @pylo/node
 
+## 0.0.12
+
+### Patch Changes
+
+- adds option to list pylo event data
+
 ## 0.0.11
 
 ### Patch Changes

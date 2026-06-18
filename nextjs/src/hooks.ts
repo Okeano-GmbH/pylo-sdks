@@ -16,6 +16,9 @@ import {
   buildUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
+  buildEventListQuery,
+  buildEventPropertyKeysQuery,
+  buildEventFieldValuesQuery,
 } from "@pylo/core";
 import type {
   SchemaMetadata,
@@ -32,6 +35,12 @@ import type {
   StrictSelect,
   RequestOptions,
   MutationRequestOptions,
+  EventListOptions,
+  PyloEventListResult,
+  PyloEventProperty,
+  PyloEventFieldValue,
+  PyloEventPropertyKeysOptions,
+  PyloEventFieldValuesOptions,
 } from "@pylo/core";
 
 interface HooksOptions {
@@ -381,6 +390,86 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
+  // Reads custom events. In list mode returns raw event rows; when
+  // `filter.dimensions` / `interval` / `group_by` are set, returns grouped
+  // rows plus grand-total `aggregations`.
+  function usePyloEventList(
+    queryOptions?: EventListOptions & RequestOptions,
+  ): UseQueryResult<PyloEventListResult> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: ["pylo", "events", "list", { ...queryOptions, headers: merged }],
+      queryFn: async () => {
+        const { query, variables } = buildEventListQuery(queryOptions);
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          PyloEventListResult
+        >;
+
+        return data["pyloEventList"]!;
+      },
+    });
+  }
+
+  // Infers the property paths (and JSON types) present across recent events.
+  function usePyloEventPropertyKeys(
+    queryOptions?: PyloEventPropertyKeysOptions & RequestOptions,
+  ): UseQueryResult<PyloEventProperty[]> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: [
+        "pylo",
+        "events",
+        "propertyKeys",
+        { filter: queryOptions?.filter, headers: merged },
+      ],
+      queryFn: async () => {
+        const { query, variables } = buildEventPropertyKeysQuery(queryOptions);
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          PyloEventProperty[]
+        >;
+
+        return data["pyloEventPropertyKeys"] ?? [];
+      },
+    });
+  }
+
+  // The most frequent distinct values of a single field, with their counts.
+  // Disabled until `field` is set.
+  function usePyloEventFieldValues(
+    field: string | null | undefined,
+    queryOptions?: PyloEventFieldValuesOptions & RequestOptions,
+  ): UseQueryResult<PyloEventFieldValue[]> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: [
+        "pylo",
+        "events",
+        "fieldValues",
+        field,
+        {
+          startTime: queryOptions?.startTime,
+          limit: queryOptions?.limit,
+          headers: merged,
+        },
+      ],
+      queryFn: async () => {
+        const { query, variables } = buildEventFieldValuesQuery(field!, queryOptions);
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          PyloEventFieldValue[]
+        >;
+
+        return data["pyloEventFieldValues"] ?? [];
+      },
+      enabled: !!field,
+    });
+  }
+
   return {
     usePyloList,
     usePyloInfiniteList,
@@ -388,5 +477,8 @@ export function createPyloHooks<S>(options: HooksOptions) {
     usePyloUpsert,
     usePyloDelete,
     usePyloIngestEvents,
+    usePyloEventList,
+    usePyloEventPropertyKeys,
+    usePyloEventFieldValues,
   };
 }

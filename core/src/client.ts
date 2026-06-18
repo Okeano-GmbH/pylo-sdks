@@ -5,7 +5,13 @@ import {
   extractErrorMessage,
   mergeHeaders,
 } from "@pylo/auth";
-import { buildListQuery, buildByIdQuery } from "./query-builder.js";
+import {
+  buildListQuery,
+  buildByIdQuery,
+  buildEventListQuery,
+  buildEventPropertyKeysQuery,
+  buildEventFieldValuesQuery,
+} from "./query-builder.js";
 import {
   buildUpsertMutation,
   buildDeleteMutation,
@@ -16,6 +22,12 @@ import type {
   PaginationData,
   PyloEvent,
   PyloEventInput,
+  EventListOptions,
+  PyloEventListResult,
+  PyloEventProperty,
+  PyloEventFieldValue,
+  PyloEventPropertyKeysOptions,
+  PyloEventFieldValuesOptions,
 } from "./shared-types.js";
 import type {
   EntityName,
@@ -86,10 +98,31 @@ export type IngestEvents = (
   options?: MutationRequestOptions,
 ) => Promise<PyloEvent[]>;
 
+// Reads custom events from the event store. Exposed as `client.events`, a
+// reserved key that shadows any entity of the same name (events are namespaced
+// under "custom." server-side, so a real entity collision is unlikely).
+export interface EventsClient {
+  // List raw events, or — when `filter.dimensions` / `interval` / `group_by`
+  // are set — grouped/analytics rows plus grand-total `aggregations`.
+  list(options?: EventListOptions & RequestOptions): Promise<PyloEventListResult>;
+
+  // Infer the property paths (and JSON types) present across recent events.
+  propertyKeys(
+    options?: PyloEventPropertyKeysOptions & RequestOptions,
+  ): Promise<PyloEventProperty[]>;
+
+  // The most frequent distinct values of a single field, with their counts.
+  fieldValues(
+    field: string,
+    options?: PyloEventFieldValuesOptions & RequestOptions,
+  ): Promise<PyloEventFieldValue[]>;
+}
+
 export type PyloClient<S> = {
   [E in EntityName<S>]: EntityClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
+  events: EventsClient;
 };
 
 function getEndpoint(endpoint?: string): string {
@@ -273,6 +306,61 @@ function createIngestEvents(
   };
 }
 
+function createEventsClient(
+  endpoint: string,
+  auth: AuthProvider,
+  globalHeaders?: Record<string, string>,
+): EventsClient {
+  return {
+    async list(options) {
+      const { query, variables } = buildEventListQuery(options);
+
+      const data = await executeGraphQL<Record<string, PyloEventListResult>>(
+        endpoint,
+        query,
+        variables,
+        auth,
+        mergeHeaders(globalHeaders, options?.headers),
+      );
+
+      const result = data["pyloEventList"];
+      if (!result) {
+        throw new PyloError("Unexpected response shape — missing pyloEventList");
+      }
+
+      return result;
+    },
+
+    async propertyKeys(options) {
+      const { query, variables } = buildEventPropertyKeysQuery(options);
+
+      const data = await executeGraphQL<Record<string, PyloEventProperty[]>>(
+        endpoint,
+        query,
+        variables,
+        auth,
+        mergeHeaders(globalHeaders, options?.headers),
+      );
+
+      return data["pyloEventPropertyKeys"] ?? [];
+    },
+
+    async fieldValues(field, options) {
+      const { query, variables } = buildEventFieldValuesQuery(field, options);
+
+      const data = await executeGraphQL<Record<string, PyloEventFieldValue[]>>(
+        endpoint,
+        query,
+        variables,
+        auth,
+        mergeHeaders(globalHeaders, options?.headers),
+      );
+
+      return data["pyloEventFieldValues"] ?? [];
+    },
+  };
+}
+
 export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const endpoint = getEndpoint(options.endpoint);
   const metadata = options.schemaMetadata;
@@ -280,11 +368,13 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const globalHeaders = options.headers;
 
   const ingestEvents = createIngestEvents(endpoint, auth, globalHeaders);
+  const events = createEventsClient(endpoint, auth, globalHeaders);
 
   return new Proxy({} as PyloClient<S>, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
       if (prop === "ingestEvents") return ingestEvents;
+      if (prop === "events") return events;
       return createEntityClient<S, EntityName<S>>(prop, endpoint, metadata, auth, globalHeaders);
     },
   });

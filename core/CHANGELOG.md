@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.0.14
+
+### Patch Changes
+
+- adds option to list pylo event data
+
 ## 0.0.13
 
 ### Patch Changes

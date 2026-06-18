@@ -90,6 +90,95 @@ export interface PyloEvent {
   properties: Record<string, unknown>;
 }
 
+// Event querying. The event store is a flat ClickHouse table; `properties` is a
+// JSON blob queried via dotted paths (e.g. `properties.user.id`, or just
+// `user.id` — the `properties.` prefix is added server-side). Top-level columns
+// are `event_name`, `ts`, `source`, `pylo_app_id`, `properties`.
+
+export type AggregateFunction = "count" | "sum" | "avg" | "min" | "max";
+
+export interface AggregateInput {
+  field: string;
+  function: AggregateFunction;
+  alias?: string;
+}
+
+export interface TimeBucketInput {
+  // Datetime field to bucket. Defaults to the native `ts` column; a dotted
+  // property path holding an ISO-8601 string is also valid.
+  field?: string;
+  // Bucket stride, e.g. "5 minute", "1 day", "1 month".
+  interval: string;
+  // IANA timezone (e.g. "Europe/Berlin"). Defaults to "UTC".
+  timezone?: string;
+}
+
+// A single breakdown axis. Set exactly one of `field` or `timeBucket`.
+export interface DimensionInput {
+  field?: string;
+  timeBucket?: TimeBucketInput;
+}
+
+export interface EventListFilterInput {
+  query?: QueryInput[];
+  sortby?: SortInput[];
+  // Metrics to compute. Emitted in the grand-total `aggregations`, and per-group
+  // when `dimensions` (or the legacy `group_by` / `interval`) are set.
+  aggregate?: AggregateInput[];
+  // Ordered breakdown axes: [0] is the primary axis, [1] the series breakdown.
+  // When set, takes precedence over the top-level `interval` / `group_by`.
+  dimensions?: DimensionInput[];
+  // Cap on returned grouped rows (after sort). No effect on `aggregations`.
+  limit?: number;
+}
+
+export interface EventListOptions {
+  filter?: EventListFilterInput;
+  pagination?: PaginationInput;
+  // Restrict the returned columns in list mode (top-level columns or dotted
+  // property paths). Ignored in grouped/analytics mode.
+  select_fields?: string[];
+  // Legacy grouped-mode args. Prefer `filter.dimensions`. Presence of either
+  // `interval` or `group_by` switches the query into grouped/analytics mode.
+  interval?: string;
+  timezone?: string;
+  group_by?: string[];
+  // ISO-8601 lower bound on `ts` (convenience for the common time filter).
+  startTime?: string;
+}
+
+// Rows are plain JSON objects. In list mode: `{ event_name, ts, properties, ... }`
+// (or just the `select_fields`). In grouped mode: one row per group with the
+// dimension keys (or `bucket` for a time bucket) plus the metric aliases.
+export interface PyloEventListResult {
+  data: Array<Record<string, unknown>>;
+  pagination: PaginationData;
+  // Grand total over the full filtered set; `{ <alias>: number, ... }` or null
+  // when no `aggregate` metrics were requested.
+  aggregations: Record<string, unknown> | null;
+}
+
+// An inferred property path and its JSON type, derived from recent events.
+export interface PyloEventProperty {
+  path: string;
+  type: string;
+}
+
+// A distinct value of a field and how often it occurs, most frequent first.
+export interface PyloEventFieldValue {
+  value: string;
+  count: number;
+}
+
+export interface PyloEventPropertyKeysOptions {
+  filter?: FilterInput;
+}
+
+export interface PyloEventFieldValuesOptions {
+  startTime?: string;
+  limit?: number;
+}
+
 export interface EntityMetadata {
   pascalName: string;
   scalarFieldNames: string[];
