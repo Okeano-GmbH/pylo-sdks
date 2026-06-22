@@ -11,6 +11,7 @@ import {
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
+  capitalize,
 } from "./query-builder.js";
 import {
   buildUpsertMutation,
@@ -18,7 +19,6 @@ import {
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
 import type {
-  SchemaMetadata,
   PaginationData,
   PyloEvent,
   PyloEventInput,
@@ -69,19 +69,18 @@ export type AuthProvider = () => Promise<{ token?: string; apiKey?: string }>;
 
 export interface ClientOptions {
   endpoint?: string;
-  schemaMetadata: SchemaMetadata;
   auth: AuthProvider;
   headers?: Record<string, string>;
 }
 
 export interface EntityClient<S, E extends EntityName<S>> {
-  list<Sel extends EntitySelect<S, E> | undefined = undefined>(
-    options?: ListOptions<S, E, Sel> & RequestOptions,
+  list<Sel extends EntitySelect<S, E>>(
+    options: ListOptions<S, E, Sel> & RequestOptions,
   ): Promise<ListResult<EntityResult<S, E, Sel>>>;
 
-  byId<Sel extends EntitySelect<S, E> | undefined = undefined>(
+  byId<Sel extends EntitySelect<S, E>>(
     id: string,
-    options?: ByIdOptions<S, E, Sel> & RequestOptions,
+    options: ByIdOptions<S, E, Sel> & RequestOptions,
   ): Promise<EntityResult<S, E, Sel> | null>;
 
   upsert(input: UpsertInput<S, E>, options?: MutationRequestOptions): Promise<{ id: string }>;
@@ -159,7 +158,6 @@ async function executeGraphQL<T>(
 function createEntityClient<S, E extends EntityName<S>>(
   entityKey: string,
   endpoint: string,
-  metadata: SchemaMetadata,
   auth: AuthProvider,
   globalHeaders?: Record<string, string>,
 ): EntityClient<S, E> {
@@ -167,8 +165,7 @@ function createEntityClient<S, E extends EntityName<S>>(
     async list(options) {
       const { query, variables } = buildListQuery(
         entityKey,
-        options as Record<string, unknown>,
-        metadata,
+        options as unknown as Record<string, unknown>,
       );
 
       const data = await executeGraphQL<Record<string, { data: unknown[]; pagination: PaginationData }>>(
@@ -193,8 +190,7 @@ function createEntityClient<S, E extends EntityName<S>>(
       const { query, variables } = buildByIdQuery(
         entityKey,
         id,
-        options as Record<string, unknown>,
-        metadata,
+        options as unknown as Record<string, unknown>,
       );
 
       const data = await executeGraphQL<Record<string, { data: unknown } | null>>(
@@ -213,14 +209,11 @@ function createEntityClient<S, E extends EntityName<S>>(
     },
 
     async upsert(input, options) {
-      const entityMeta = metadata.entities[entityKey];
-      if (!entityMeta) {
-        throw new PyloError(`Unknown entity: ${entityKey}`);
-      }
+      const pascalName = capitalize(entityKey);
 
       const { query, variables } = buildUpsertMutation(
         entityKey,
-        entityMeta.pascalName,
+        pascalName,
         input as Record<string, unknown>,
       );
 
@@ -235,7 +228,7 @@ function createEntityClient<S, E extends EntityName<S>>(
         ),
       );
 
-      const mutationKey = `update${entityMeta.pascalName}`;
+      const mutationKey = `update${pascalName}`;
       const result = data[mutationKey];
       if (!result) {
         throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);
@@ -245,14 +238,11 @@ function createEntityClient<S, E extends EntityName<S>>(
     },
 
     async delete(ids, options) {
-      const entityMeta = metadata.entities[entityKey];
-      if (!entityMeta) {
-        throw new PyloError(`Unknown entity: ${entityKey}`);
-      }
+      const pascalName = capitalize(entityKey);
 
       const { query, variables } = buildDeleteMutation(
         entityKey,
-        entityMeta.pascalName,
+        pascalName,
         ids,
       );
 
@@ -267,7 +257,7 @@ function createEntityClient<S, E extends EntityName<S>>(
         ),
       );
 
-      const mutationKey = `delete${entityMeta.pascalName}`;
+      const mutationKey = `delete${pascalName}`;
       const result = data[mutationKey];
       if (!result) {
         throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);
@@ -363,7 +353,6 @@ function createEventsClient(
 
 export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const endpoint = getEndpoint(options.endpoint);
-  const metadata = options.schemaMetadata;
   const auth = options.auth;
   const globalHeaders = options.headers;
 
@@ -375,7 +364,7 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
       if (typeof prop !== "string") return undefined;
       if (prop === "ingestEvents") return ingestEvents;
       if (prop === "events") return events;
-      return createEntityClient<S, EntityName<S>>(prop, endpoint, metadata, auth, globalHeaders);
+      return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, globalHeaders);
     },
   });
 }

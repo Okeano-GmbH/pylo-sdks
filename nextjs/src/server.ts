@@ -1,10 +1,9 @@
 import { createPyloClient, PyloError } from "@pylo/core";
-import type { PyloClient, SchemaMetadata } from "@pylo/core";
+import type { PyloClient } from "@pylo/core";
 import { getAuthToken } from "@pylo/auth-nextjs/core";
 
 interface ServerOptions {
   endpoint?: string;
-  schemaMetadata: SchemaMetadata;
   apiKey?: string;
   headers?: Record<string, string>;
 }
@@ -22,7 +21,6 @@ export function createPyloServer<S>(options: ServerOptions): PyloServer<S> {
 
   return createPyloClient<S>({
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
-    schemaMetadata: options.schemaMetadata,
     auth,
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
   });

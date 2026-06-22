@@ -178,24 +178,3 @@ export interface PyloEventFieldValuesOptions {
   startTime?: string;
   limit?: number;
 }
-
-export interface EntityMetadata {
-  pascalName: string;
-  scalarFieldNames: string[];
-  variantFieldNames?: string[];
-  jsonFieldNames?: string[];
-  enumFields?: Record<string, string[]>;
-  relations: Record<
-    string,
-    {
-      type: "hasOne" | "hasMany";
-      entity: string;
-      pascalName: string;
-    }
-  >;
-}
-
-export interface SchemaMetadata {
-  entities: Record<string, EntityMetadata>;
-  unknownFieldBehavior?: "error" | "ignore";
-}

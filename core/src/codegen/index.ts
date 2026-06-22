@@ -1,11 +1,10 @@
 import { resolve } from "node:path";
-import { loadConfig, defineConfig } from "./config.js";
+import { loadConfig } from "./config.js";
 import { fetchSchema } from "./fetch-schema.js";
 import { analyzeEntities } from "./analyze.js";
 import {
   generateIndexFile,
   generateEntitiesFile,
-  generateSchemaMetadataFile,
 } from "./generate.js";
 import { writeGeneratedFiles } from "./write.js";
 
@@ -37,7 +36,6 @@ export async function generate(options?: GenerateOptions): Promise<void> {
   const files: Record<string, string> = {
     "index.ts": generateIndexFile(entities, importSource),
     "entities.ts": generateEntitiesFile(entities, importSource),
-    "schema-metadata.ts": generateSchemaMetadataFile(entities, config.unknownFieldBehavior, importSource),
   };
 
   console.log(`Writing files to ${outputDir}...`);

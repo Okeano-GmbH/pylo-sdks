@@ -2,11 +2,20 @@
 	"private": true,
 	"license": "MIT",
 	"scripts": {
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"changeset": "changeset",
 		"write:versions": "changeset version",
 		"publish:versions": "pnpm -r publish --access public"
 	},
 	"devDependencies": {
-		"@changesets/cli": "^2.29.8"
+		"@changesets/cli": "^2.29.8",
+		"@eslint/js": "^10.0.1",
+		"eslint": "^10.5.0",
+		"typescript": "^5.9.3",
+		"typescript-eslint": "^8.61.1",
+		"vitest": "^4.1.9"
 	}
 }

@@ -2,6 +2,13 @@ import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
 
 const VARIANT_TYPE = "{ variant: string; value: string }";
 
+// Packages that expose an augmentable `PyloRegister` — when codegen targets one
+// of these (via `importSource`), the generated index registers the schema so
+// the `pylo` client and the `PyloSelect` / `PyloResult` helpers are typed with
+// no manual `declare module` step. `@pylo/core` has no register, so it's
+// omitted.
+const REGISTERABLE_SOURCES = new Set(["@pylo/node", "@pylo/nextjs"]);
+
 function fieldTypeString(field: AnalyzedField): string {
   if (field.nullable) {
     return `${field.tsType} | null`;
@@ -23,10 +30,31 @@ function getVariantFieldNames(entity: AnalyzedEntity): string[] {
     .map((f) => f.variantFieldName!);
 }
 
+// None writeable fields to replace variables
+const NON_WRITABLE_FIELDS = new Set(["integer_id", "created_at", "updated_at"]);
+
+// The `replace_variables` field for an update input: a typed list of the
+// entity's writable field names whose template variables the server should
+// resolve during the upsert. Returns the commented TS lines, or `null` when the
+// entity has no writable fields.
+function generateReplaceVariablesField(entity: AnalyzedEntity): string | null {
+  const fieldNames = entity.fields
+    .map((f) => f.name)
+    .filter((name) => !NON_WRITABLE_FIELDS.has(name));
+  if (fieldNames.length === 0) return null;
+
+  const union = fieldNames.map((name) => `'${name}'`).join(" | ");
+  return [
+    "/**",
+    " * Field names whose template variables (e.g. `${replace_uuid.myNewEntity}`) the server",
+    " * should resolve to their concrete values during this upsert.",
+    " */",
+    `replace_variables?: Array<${union}>;`,
+  ].join("\n");
+}
+
 function generateEntityFieldsType(entity: AnalyzedEntity): string {
-  const lines = entity.fields.map(
-    (f) => `${f.name}: ${fieldTypeString(f)};`,
-  );
+  const lines = entity.fields.map((f) => `${f.name}: ${fieldTypeString(f)};`);
   for (const variantName of getVariantFieldNames(entity)) {
     lines.push(`${variantName}: ${VARIANT_TYPE}[] | null;`);
   }
@@ -57,12 +85,11 @@ function generateCreateInputType(entity: AnalyzedEntity): string {
 
   for (const rel of entity.relations) {
     for (const suffix of rel.suffixes) {
-      const valueType = rel.type === "hasMany"
-        ? "Record<string, unknown>[]"
-        : "Record<string, unknown>";
-      lines.push(
-        `${rel.fieldName}${suffix}?: ${valueType};`,
-      );
+      const valueType =
+        rel.type === "hasMany"
+          ? "Record<string, unknown>[]"
+          : "Record<string, unknown>";
+      lines.push(`${rel.fieldName}${suffix}?: ${valueType};`);
     }
   }
 
@@ -77,6 +104,11 @@ function generateUpdateInputType(entity: AnalyzedEntity): string {
     "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };",
   );
 
+  const replaceVariables = generateReplaceVariablesField(entity);
+  if (replaceVariables) {
+    lines.push(replaceVariables);
+  }
+
   for (const field of entity.fields) {
     if (field.name === "id" || field.name === "integer_id") continue;
     if (field.name === "created_at" || field.name === "updated_at") continue;
@@ -89,12 +121,11 @@ function generateUpdateInputType(entity: AnalyzedEntity): string {
 
   for (const rel of entity.relations) {
     for (const suffix of rel.suffixes) {
-      const valueType = rel.type === "hasMany"
-        ? "Record<string, unknown>[]"
-        : "Record<string, unknown>";
-      lines.push(
-        `${rel.fieldName}${suffix}?: ${valueType};`,
-      );
+      const valueType =
+        rel.type === "hasMany"
+          ? "Record<string, unknown>[]"
+          : "Record<string, unknown>";
+      lines.push(`${rel.fieldName}${suffix}?: ${valueType};`);
     }
   }
 
@@ -115,7 +146,10 @@ function collectEnumTypes(
   return Array.from(seen, ([typeName, values]) => ({ typeName, values }));
 }
 
-export function generateIndexFile(entities: AnalyzedEntity[], importSource: string): string {
+export function generateIndexFile(
+  entities: AnalyzedEntity[],
+  importSource: string,
+): string {
   const lines: string[] = [];
 
   lines.push(
@@ -131,8 +165,6 @@ export function generateIndexFile(entities: AnalyzedEntity[], importSource: stri
     "  SortInput,",
     "  SortOrder,",
     "  SearchValueInput,",
-    "  SchemaMetadata,",
-    "  EntityMetadata,",
     `} from '${importSource}';`,
     "",
   );
@@ -179,10 +211,26 @@ export function generateIndexFile(entities: AnalyzedEntity[], importSource: stri
   }
   lines.push("}", "");
 
+  // Register the schema so the typed client and the PyloSelect/PyloResult
+  // helpers pick it up automatically (no hand-written `declare module`).
+  if (REGISTERABLE_SOURCES.has(importSource)) {
+    lines.push(
+      `declare module '${importSource}' {`,
+      "  interface PyloRegister {",
+      "    schema: PyloSchema;",
+      "  }",
+      "}",
+      "",
+    );
+  }
+
   return lines.join("\n");
 }
 
-export function generateEntitiesFile(entities: AnalyzedEntity[], importSource: string): string {
+export function generateEntitiesFile(
+  entities: AnalyzedEntity[],
+  importSource: string,
+): string {
   const lines: string[] = [];
 
   lines.push(
@@ -209,68 +257,17 @@ export function generateEntitiesFile(entities: AnalyzedEntity[], importSource: s
     }
     for (const rel of entity.relations) {
       if (rel.type === "hasOne") {
-        lines.push(`  ${rel.fieldName}?: { data: ${rel.targetEntityPascalName} } | null;`);
+        lines.push(
+          `  ${rel.fieldName}?: { data: ${rel.targetEntityPascalName} } | null;`,
+        );
       } else {
-        lines.push(`  ${rel.fieldName}?: { data: ${rel.targetEntityPascalName}[]; pagination: PaginationData };`);
+        lines.push(
+          `  ${rel.fieldName}?: { data: ${rel.targetEntityPascalName}[]; pagination: PaginationData };`,
+        );
       }
     }
     lines.push("}", "");
   }
-
-  return lines.join("\n");
-}
-
-export function generateSchemaMetadataFile(
-  entities: AnalyzedEntity[],
-  unknownFieldBehavior: "error" | "ignore",
-  importSource: string,
-): string {
-  const lines: string[] = [];
-
-  lines.push(
-    "// Auto-generated by @pylo/core codegen — DO NOT EDIT",
-    "",
-    `import type { SchemaMetadata } from '${importSource}';`,
-    "",
-    "export const schemaMetadata: SchemaMetadata = {",
-    `  unknownFieldBehavior: '${unknownFieldBehavior}',`,
-    "  entities: {",
-  );
-
-  for (const entity of entities) {
-    lines.push(`    ${entity.key}: {`);
-    lines.push(`      pascalName: '${entity.pascalName}',`);
-
-    const scalarNames = entity.fields.map((f) => `'${f.name}'`).join(", ");
-    lines.push(`      scalarFieldNames: [${scalarNames}],`);
-
-    const variantNames = getVariantFieldNames(entity);
-    if (variantNames.length > 0) {
-      const variantNamesStr = variantNames.map((n) => `'${n}'`).join(", ");
-      lines.push(`      variantFieldNames: [${variantNamesStr}],`);
-    }
-
-    const enumFields = entity.fields.filter((f) => f.enum !== null);
-    if (enumFields.length > 0) {
-      lines.push("      enumFields: {");
-      for (const f of enumFields) {
-        const vals = f.enum!.values.map((v) => `'${v}'`).join(", ");
-        lines.push(`        ${f.name}: [${vals}],`);
-      }
-      lines.push("      },");
-    }
-
-    lines.push("      relations: {");
-    for (const rel of entity.relations) {
-      lines.push(
-        `        ${rel.fieldName}: { type: '${rel.type}', entity: '${rel.targetEntityKey}', pascalName: '${rel.targetEntityPascalName}' },`,
-      );
-    }
-    lines.push("      },");
-    lines.push("    },");
-  }
-
-  lines.push("  },", "};", "");
 
   return lines.join("\n");
 }

@@ -1,21 +1,101 @@
 import { createPyloClient } from "@pylo/core";
-import type { PyloClient, SchemaMetadata } from "@pylo/core";
+import type {
+  PyloClient,
+  EntityName,
+  EntitySelect,
+  EntityResult,
+} from "@pylo/core";
 
 interface NodeClientOptions {
   apiKey: string;
   endpoint?: string;
-  schemaMetadata: SchemaMetadata;
   headers?: Record<string, string>;
 }
 
 export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
   return createPyloClient<S>({
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
-    schemaMetadata: options.schemaMetadata,
     auth: async () => ({ apiKey: options.apiKey }),
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
   });
 }
+
+/**
+ * Augmentable registry that lets a host pin the schema type for the injected
+ * `pylo` client. Generated code augments it, e.g.:
+ *
+ *   declare module "@pylo/node" {
+ *     interface PyloRegister { schema: PyloSchema }
+ *   }
+ *
+ * With no augmentation the client falls back to an untyped (`any`) schema.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface PyloRegister {}
+
+export type RegisteredSchema = PyloRegister extends { schema: infer S }
+  ? S
+  : any;
+
+/**
+ * Entity keys available on the registered schema — e.g. `"contact"`. Use as the
+ * type parameter for {@link PyloSelect} / {@link PyloResult}.
+ */
+export type PyloEntity = EntityName<RegisteredSchema>;
+
+/**
+ * A reusable, type-safe selection for one entity on the registered schema.
+ * Lets you define what to fetch once and reuse it across calls.
+ *
+ * Declare the selection with `satisfies` (not a plain `: PyloSelect<…>`
+ * annotation) so the exact set of selected fields is preserved — that's what
+ * keeps {@link PyloResult} precise:
+ *
+ * ```ts
+ * const contactSelect = {
+ *   name: true,
+ *   email: true,
+ *   company: { select: { name: true } },
+ * } satisfies PyloSelect<"contact">;
+ *
+ * const { data } = await pylo.contact.list({ select: contactSelect });
+ * type Contact = PyloResult<"contact", typeof contactSelect>;
+ * ```
+ */
+export type PyloSelect<E extends PyloEntity> = EntitySelect<RegisteredSchema, E>;
+
+/**
+ * The row type returned for a given entity and selection. Pair with
+ * `typeof <yourSelect>` (see {@link PyloSelect}) for an exact result type.
+ */
+export type PyloResult<
+  E extends PyloEntity,
+  Sel extends PyloSelect<E>,
+> = EntityResult<RegisteredSchema, E, Sel>;
+
+/**
+ * Zero-config client for environments that inject a ready-made client onto
+ * `globalThis.__PYLO_FLOW_CLIENT__` — e.g. the Pylo flow worker, which builds
+ * the client from the flow's API key and the customer's schema before running
+ * an action. Property access is forwarded to the current global client at
+ * access time, so a worker reused across customers always sees the live one.
+ */
+export const pylo: PyloClient<RegisteredSchema> = new Proxy(
+  {} as PyloClient<RegisteredSchema>,
+  {
+    get(_target, prop) {
+      const client = (globalThis as Record<string, unknown>)[
+        "__PYLO_FLOW_CLIENT__"
+      ] as Record<string | symbol, unknown> | undefined;
+      if (!client) {
+        throw new Error(
+          "Pylo flow client unavailable (globalThis.__PYLO_FLOW_CLIENT__ is unset). `pylo` is only usable inside a Pylo flow action.",
+        );
+      }
+      return client[prop];
+    },
+  },
+);
 
 // Re-export all types from @pylo/core
 export type {
@@ -28,8 +108,6 @@ export type {
   PaginationInput,
   PaginationData,
   SearchValueInput,
-  EntityMetadata,
-  SchemaMetadata,
   PyloEvent,
   PyloEventInput,
   AggregateFunction,

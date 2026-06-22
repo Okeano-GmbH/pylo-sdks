@@ -139,7 +139,7 @@ export async function pyloAuth(
       headers: requestHeaders,
     },
   });
-  let user: PyloUser | null = null;
+  const user: PyloUser | null = null;
   let loggedIn = false;
 
   // Smart redirect helper - handles Server Actions, API routes, and public paths automatically

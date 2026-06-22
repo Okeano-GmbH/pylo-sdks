@@ -24,7 +24,7 @@ async function graphqlRequestWithApiKey<T>(
   return response.json() as Promise<GraphQLResponse<T>>;
 }
 
-const ENTITY_LIST_QUERY = `
+export const ENTITY_LIST_QUERY = `
 query PyloSchemaFetch($pagination: PaginationInput) {
   entityList(pagination: $pagination) {
     data {
@@ -137,7 +137,7 @@ export interface RawEntity {
   } | null;
 }
 
-interface EntityListResponse {
+export interface EntityListResponse {
   entityList: {
     data: RawEntity[];
     pagination: {
@@ -148,18 +148,30 @@ interface EntityListResponse {
   };
 }
 
-export async function fetchSchema(config: ResolvedPyloConfig): Promise<RawEntity[]> {
+/**
+ * Transport-agnostic GraphQL request used to introspect the Pylo schema. Lets
+ * callers that aren't the CLI (e.g. a browser using cookie auth via a proxy, or
+ * a server using a different api-key header) reuse the pagination logic in
+ * `fetchSchemaWith` without depending on `ResolvedPyloConfig`.
+ */
+export type SchemaFetcher = <T>(
+  query: string,
+  variables: Record<string, unknown>,
+) => Promise<GraphQLResponse<T>>;
+
+/**
+ * Paginate through `entityList` using the supplied transport and return the
+ * raw entities. Feed the result to `analyzeEntities`.
+ */
+export async function fetchSchemaWith(request: SchemaFetcher): Promise<RawEntity[]> {
   const allEntities: RawEntity[] = [];
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
-    const response = await graphqlRequestWithApiKey<EntityListResponse>(
-      config.endpoint,
-      ENTITY_LIST_QUERY,
-      { pagination: { page, per_page: 50 } },
-      config.apiKey,
-    );
+    const response = await request<EntityListResponse>(ENTITY_LIST_QUERY, {
+      pagination: { page, per_page: 50 },
+    });
 
     if (response.errors) {
       const errMsg =
@@ -180,4 +192,10 @@ export async function fetchSchema(config: ResolvedPyloConfig): Promise<RawEntity
   }
 
   return allEntities;
+}
+
+export async function fetchSchema(config: ResolvedPyloConfig): Promise<RawEntity[]> {
+  return fetchSchemaWith((query, variables) =>
+    graphqlRequestWithApiKey(config.endpoint, query, variables, config.apiKey),
+  );
 }

@@ -1,6 +1,4 @@
 import type {
-  SchemaMetadata,
-  EntityMetadata,
   EventListOptions,
   EventListFilterInput,
   PyloEventPropertyKeysOptions,
@@ -12,15 +10,19 @@ interface BuildResult {
   variables: Record<string, unknown>;
 }
 
-interface SelectObject {
-  [key: string]:
-    | true
-    | {
-        select?: SelectObject;
-        filter?: unknown;
-        pagination?: unknown;
-      };
+interface RelationSelect {
+  select?: SelectObject;
+  filter?: unknown;
+  pagination?: unknown;
 }
+
+interface SelectObject {
+  [key: string]: true | RelationSelect;
+}
+
+// Variant fields are codegen-named with this suffix and must be queried as
+// `field { data { value variant } }` rather than as a bare scalar.
+const VARIANT_SUFFIX = "_variants";
 
 // Runtime option types — accept `unknown` since type safety is at the SDK layer
 interface ListOptionsInput {
@@ -41,125 +43,99 @@ const PAGINATION_FIELDS = `pagination {
     has_more_pages
   }`;
 
+// Builds a GraphQL selection set from a runtime `select` object, using
+// conventions instead of schema metadata:
+//   - `key: true`              → a scalar field, or a variant field when the
+//                                key ends in `_variants` (emitted with its
+//                                `{ data { value variant } }` sub-selection).
+//   - `key: { select, … }`     → a relation; emitted as `key { data { … } }`,
+//                                with a `pagination { … }` block only when a
+//                                `pagination` key is supplied (opt-in, so the
+//                                runtime needn't know hasOne vs hasMany).
 function buildSelectionSet(
-  select: SelectObject | undefined,
-  entityMeta: EntityMetadata,
-  schemaMetadata: SchemaMetadata,
+  select: SelectObject,
   variables: Record<string, unknown>,
   variableTypes: Map<string, string>,
   prefix: string,
 ): string {
   const fields: string[] = [];
 
-  const variantFieldNames = entityMeta.variantFieldNames ?? [];
-
-  if (!select) {
-    // No select → all scalar fields + variant fields
-    fields.push(...entityMeta.scalarFieldNames);
-    for (const vf of variantFieldNames) {
-      fields.push(`${vf} { data { value variant } }`);
-    }
-    return fields.join("\n    ");
-  }
-
   for (const [key, value] of Object.entries(select)) {
-    // Check if it's a scalar field
-    if (entityMeta.scalarFieldNames.includes(key)) {
-      if (value === true) {
+    if (value === true) {
+      if (key.endsWith(VARIANT_SUFFIX)) {
+        fields.push(`${key} { data { value variant } }`);
+      } else {
         fields.push(key);
       }
       continue;
     }
 
-    // Check if it's a variant field
-    if (variantFieldNames.includes(key)) {
-      if (value === true) {
-        fields.push(`${key} { data { value variant } }`);
-      }
-      continue;
+    if (typeof value !== "object" || value === null) continue;
+
+    const relation = value as RelationSelect;
+    const argParts: string[] = [];
+
+    // Handle filter argument
+    if (relation.filter !== undefined) {
+      const varName = `${prefix}${key}_filter`;
+      variables[varName] = relation.filter;
+      variableTypes.set(varName, "FilterInput");
+      argParts.push(`filter: $${varName}`);
     }
 
-    // Check if it's a relation
-    const relation = entityMeta.relations[key];
-    if (!relation) {
-      if (schemaMetadata.unknownFieldBehavior === "ignore") continue;
-      const validFields = [...entityMeta.scalarFieldNames, ...variantFieldNames].join(", ");
-      const validRelations = Object.keys(entityMeta.relations).join(", ");
-      throw new Error(
-        `Unknown field "${key}" on entity "${entityMeta.pascalName}". Valid fields: ${validFields}. Valid relations: ${validRelations}`,
-      );
+    // Pagination is opt-in: its presence both passes the argument and adds the
+    // `pagination { … }` response block.
+    const wantsPagination = relation.pagination !== undefined;
+    if (wantsPagination) {
+      const varName = `${prefix}${key}_pagination`;
+      variables[varName] = relation.pagination;
+      variableTypes.set(varName, "PaginationInput");
+      argParts.push(`pagination: $${varName}`);
     }
 
-    const targetMeta = schemaMetadata.entities[relation.entity];
-    if (!targetMeta) continue;
+    const args = argParts.length > 0 ? `(${argParts.join(", ")})` : "";
 
-    const isHasMany = relation.type === "hasMany";
+    if (!relation.select) {
+      throw new Error(`Relation "${key}" requires an explicit { select: {...} }.`);
+    }
 
-    if (value === true) {
-      // Fetch all scalar fields + variant fields of target
-      const targetFieldParts = [...targetMeta.scalarFieldNames];
-      for (const vf of targetMeta.variantFieldNames ?? []) {
-        targetFieldParts.push(`${vf} { data { value variant } }`);
-      }
-      const targetFields = targetFieldParts.join(" ");
-      if (isHasMany) {
-        fields.push(`${key} { data { ${targetFields} } ${PAGINATION_FIELDS} }`);
-      } else {
-        fields.push(`${key} { data { ${targetFields} } }`);
-      }
-    } else if (typeof value === "object" && value !== null) {
-      const argParts: string[] = [];
+    const nestedSelection = buildSelectionSet(
+      relation.select,
+      variables,
+      variableTypes,
+      `${prefix}${key}_`,
+    );
 
-      // Handle filter argument
-      if (value.filter !== undefined) {
-        const varName = `${prefix}${key}_filter`;
-        variables[varName] = value.filter;
-        variableTypes.set(varName, "FilterInput");
-        argParts.push(`filter: $${varName}`);
-      }
-
-      // Handle pagination argument
-      if (isHasMany && value.pagination !== undefined) {
-        const varName = `${prefix}${key}_pagination`;
-        variables[varName] = value.pagination;
-        variableTypes.set(varName, "PaginationInput");
-        argParts.push(`pagination: $${varName}`);
-      }
-
-      const args = argParts.length > 0 ? `(${argParts.join(", ")})` : "";
-
-      // Build nested selection
-      const nestedSelection = buildSelectionSet(
-        value.select,
-        targetMeta,
-        schemaMetadata,
-        variables,
-        variableTypes,
-        `${prefix}${key}_`,
-      );
-
-      if (isHasMany) {
-        fields.push(
-          `${key}${args} { data { ${nestedSelection} } ${PAGINATION_FIELDS} }`,
-        );
-      } else {
-        fields.push(`${key}${args} { data { ${nestedSelection} } }`);
-      }
+    if (wantsPagination) {
+      fields.push(`${key}${args} { data { ${nestedSelection} } ${PAGINATION_FIELDS} }`);
+    } else {
+      fields.push(`${key}${args} { data { ${nestedSelection} } }`);
     }
   }
 
   return fields.join("\n    ");
 }
 
+function requireSelect(
+  entityKey: string,
+  operation: string,
+  select: unknown,
+): SelectObject {
+  if (
+    !select ||
+    typeof select !== "object" ||
+    Object.keys(select as object).length === 0
+  ) {
+    throw new Error(`${operation}("${entityKey}") requires an explicit 'select'.`);
+  }
+  return select as SelectObject;
+}
+
 export function buildListQuery(
   entityKey: string,
   options: ListOptionsInput | undefined,
-  schemaMetadata: SchemaMetadata,
 ): BuildResult {
-  const entityMeta = schemaMetadata.entities[entityKey];
-  if (!entityMeta) {
-    throw new Error(`Unknown entity: ${entityKey}`);
-  }
+  const select = requireSelect(entityKey, "list", options?.select);
 
   const variables: Record<string, unknown> = {};
   const variableTypes = new Map<string, string>();
@@ -174,14 +150,7 @@ export function buildListQuery(
     variableTypes.set("pagination", "PaginationInput");
   }
 
-  const selectionSet = buildSelectionSet(
-    options?.select as SelectObject | undefined,
-    entityMeta,
-    schemaMetadata,
-    variables,
-    variableTypes,
-    "r_",
-  );
+  const selectionSet = buildSelectionSet(select, variables, variableTypes, "r_");
 
   // Build variable declarations
   const varDecls = Array.from(variableTypes.entries())
@@ -218,24 +187,13 @@ export function buildByIdQuery(
   entityKey: string,
   id: string,
   options: ByIdOptionsInput | undefined,
-  schemaMetadata: SchemaMetadata,
 ): BuildResult {
-  const entityMeta = schemaMetadata.entities[entityKey];
-  if (!entityMeta) {
-    throw new Error(`Unknown entity: ${entityKey}`);
-  }
+  const select = requireSelect(entityKey, "byId", options?.select);
 
   const variables: Record<string, unknown> = { id };
   const variableTypes = new Map<string, string>([["id", "ID!"]]);
 
-  const selectionSet = buildSelectionSet(
-    options?.select as SelectObject | undefined,
-    entityMeta,
-    schemaMetadata,
-    variables,
-    variableTypes,
-    "r_",
-  );
+  const selectionSet = buildSelectionSet(select, variables, variableTypes, "r_");
 
   const varDecls = Array.from(variableTypes.entries())
     .map(([name, type]) => `$${name}: ${type}`)
@@ -252,7 +210,11 @@ export function buildByIdQuery(
   return { query, variables };
 }
 
-function capitalize(str: string): string {
+// Recovers an entity's PascalName from its camelCase key — the exact inverse of
+// codegen's `toEntityKey` (which only lowercases the first char). Used for
+// mutation field names (`update${PascalName}` / `delete${PascalName}`) so the
+// runtime no longer needs schema metadata to look up `pascalName`.
+export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 

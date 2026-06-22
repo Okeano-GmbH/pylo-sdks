@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2020",
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["**/test/**/*.test-d.ts"],
+  "exclude": ["node_modules", "**/dist"]
+}

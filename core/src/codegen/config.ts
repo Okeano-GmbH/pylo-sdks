@@ -8,7 +8,6 @@ export interface PyloConfig {
   endpoint?: string;
   apiKey: string;
   output?: string;
-  unknownFieldBehavior?: "error" | "ignore";
 }
 
 export function defineConfig(config: PyloConfig): PyloConfig {
@@ -19,7 +18,6 @@ export interface ResolvedPyloConfig {
   endpoint: string;
   apiKey: string;
   output?: string;
-  unknownFieldBehavior: "error" | "ignore";
 }
 
 export async function loadConfig(cwd: string): Promise<ResolvedPyloConfig> {
@@ -54,7 +52,6 @@ export async function loadConfig(cwd: string): Promise<ResolvedPyloConfig> {
       }
       return {
         endpoint: DEFAULT_ENDPOINT,
-        unknownFieldBehavior: "error" as const,
         ...config,
       };
     }

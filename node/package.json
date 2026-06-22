@@ -1,15 +1,22 @@
 {
   "name": "@pylo/node",
-  "version": "0.0.12",
+  "version": "0.1.0",
   "description": "Server-side Pylo SDK with API key authentication",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./codegen": {
       "types": "./dist/codegen.d.ts",
-      "import": "./dist/codegen.js"
+      "import": "./dist/codegen.js",
+      "default": "./dist/codegen.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js",
+      "default": "./dist/schema.js"
     }
   },
   "main": "dist/index.js",

@@ -9,8 +9,6 @@ export type {
   PaginationInput,
   PaginationData,
   SearchValueInput,
-  EntityMetadata,
-  SchemaMetadata,
   PyloEvent,
   PyloEventInput,
   AggregateFunction,
@@ -49,6 +47,7 @@ export {
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
+  capitalize,
 } from "./query-builder.js";
 export {
   buildUpsertMutation,

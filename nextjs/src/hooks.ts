@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders } from "@pylo/core";
+import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders, capitalize } from "@pylo/core";
 import {
   buildUpsertMutation,
   buildDeleteMutation,
@@ -21,7 +21,6 @@ import {
   buildEventFieldValuesQuery,
 } from "@pylo/core";
 import type {
-  SchemaMetadata,
   PaginationData,
   PyloEvent,
   PyloEventInput,
@@ -45,7 +44,6 @@ import type {
 
 interface HooksOptions {
   apiPath?: string;
-  schemaMetadata: SchemaMetadata;
   headers?: Record<string, string>;
 }
 
@@ -57,11 +55,9 @@ interface ListHookResult<T> {
   refetch: UseQueryResult["refetch"];
 }
 
-type InfiniteListOptions<S, E extends EntityName<S>, Sel extends EntitySelect<S, E> | undefined = undefined> = {
+type InfiniteListOptions<S, E extends EntityName<S>, Sel extends EntitySelect<S, E>> = {
   perPage?: number;
-  select?: Sel extends undefined
-    ? EntitySelect<S, E>
-    : StrictSelect<Sel, EntitySelect<S, E>>;
+  select: StrictSelect<Sel, EntitySelect<S, E>>;
   filter?: FilterInput;
 } & RequestOptions;
 
@@ -104,15 +100,14 @@ async function clientFetch(
 
 export function createPyloHooks<S>(options: HooksOptions) {
   const apiPath = options.apiPath ?? "/api/graphql";
-  const metadata = options.schemaMetadata;
   const globalHeaders = options.headers;
 
   function usePyloList<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E> | undefined = undefined,
+    Sel extends EntitySelect<S, E>,
   >(
     entity: E,
-    queryOptions?: ListOptions<S, E, Sel> & RequestOptions,
+    queryOptions: ListOptions<S, E, Sel> & RequestOptions,
   ): ListHookResult<EntityResult<S, E, Sel>> {
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     const queryKey = [
@@ -132,8 +127,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
       queryFn: async () => {
         const { query, variables } = buildListQuery(
           entity as string,
-          queryOptions as Record<string, unknown> | undefined,
-          metadata,
+          queryOptions as unknown as Record<string, unknown> | undefined,
         );
 
         const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
@@ -157,10 +151,10 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
   function usePyloInfiniteList<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E> | undefined = undefined,
+    Sel extends EntitySelect<S, E>,
   >(
     entity: E,
-    infiniteOptions?: InfiniteListOptions<S, E, Sel>,
+    infiniteOptions: InfiniteListOptions<S, E, Sel>,
   ): UseInfiniteQueryResult<{
     data: Array<EntityResult<S, E, Sel>>;
     pages: Array<{
@@ -193,7 +187,6 @@ export function createPyloHooks<S>(options: HooksOptions) {
         const { query, variables } = buildListQuery(
           entity as string,
           runtimeOptions as Record<string, unknown>,
-          metadata,
         );
 
         const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
@@ -236,11 +229,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
   function usePyloById<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E> | undefined = undefined,
+    Sel extends EntitySelect<S, E>,
   >(
     entity: E,
     id: string | null | undefined,
-    queryOptions?: ByIdOptions<S, E, Sel> & RequestOptions,
+    queryOptions: ByIdOptions<S, E, Sel> & RequestOptions,
   ): UseQueryResult<EntityResult<S, E, Sel> | null> {
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     return useQuery({
@@ -249,8 +242,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
         const { query, variables } = buildByIdQuery(
           entity as string,
           id!,
-          queryOptions as Record<string, unknown> | undefined,
-          metadata,
+          queryOptions as unknown as Record<string, unknown> | undefined,
         );
 
         const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
@@ -285,14 +277,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
     return useMutation({
       ...mutationOptions,
       mutationFn: async (input: UpsertInput<S, E>) => {
-        const entityMeta = metadata.entities[entity as string];
-        if (!entityMeta) {
-          throw new Error(`Unknown entity: ${entity as string}`);
-        }
+        const pascalName = capitalize(entity as string);
 
         const { query, variables } = buildUpsertMutation(
           entity as string,
-          entityMeta.pascalName,
+          pascalName,
           input as Record<string, unknown>,
         );
 
@@ -301,7 +290,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           { data: { id: string } }
         >;
 
-        const mutationKey = `update${entityMeta.pascalName}`;
+        const mutationKey = `update${pascalName}`;
         return data[mutationKey]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
@@ -332,14 +321,11 @@ export function createPyloHooks<S>(options: HooksOptions) {
     return useMutation({
       ...mutationOptions,
       mutationFn: async (ids: string[]) => {
-        const entityMeta = metadata.entities[entity as string];
-        if (!entityMeta) {
-          throw new Error(`Unknown entity: ${entity as string}`);
-        }
+        const pascalName = capitalize(entity as string);
 
         const { query, variables } = buildDeleteMutation(
           entity as string,
-          entityMeta.pascalName,
+          pascalName,
           ids,
         );
 
@@ -348,7 +334,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           { data: { success: boolean } }
         >;
 
-        const mutationKey = `delete${entityMeta.pascalName}`;
+        const mutationKey = `delete${pascalName}`;
         return data[mutationKey]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {

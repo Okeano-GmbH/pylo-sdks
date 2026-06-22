@@ -1,6 +1,6 @@
 {
   "name": "@pylo/core",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "description": "Core entity client, types, query builders, and codegen for Pylo SDKs",
   "type": "module",
   "bin": {
@@ -14,6 +14,10 @@
     "./codegen": {
       "types": "./dist/codegen/index.d.ts",
       "import": "./dist/codegen/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
     },
     "./cli": "./dist/cli.js"
   },
