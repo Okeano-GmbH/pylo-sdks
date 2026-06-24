@@ -31,7 +31,7 @@ const DATA_TYPE_MAP: Record<string, string> = {
   RICHTEXT: "string",
   INT: "number",
   FLOAT: "number",
-  JSON: "Record<string, unknown> | unknown[]",
+  JSON: "string",
   DATE: "string",
   DATETIME: "string",
   TIME: "string",

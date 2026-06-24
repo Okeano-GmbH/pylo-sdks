@@ -55,6 +55,37 @@ describe("generateIndexFile — replace_variables", () => {
   });
 });
 
+describe("analyzeEntities — JSON fields", () => {
+  // JSON is transferred as stringified JSON over the wire, so the generated
+  // type must be a plain string, not a parsed object/array.
+  const jsonEntity: RawEntity = {
+    name: "Doc",
+    shortcode: "dc",
+    is_system_entity: false,
+    entity_fields: {
+      data: [
+        field("metadata", "JSON"),
+        field("config", "JSON", "required"),
+      ],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  it("maps a required JSON field to string", () => {
+    const [entity] = analyzeEntities([jsonEntity]);
+    const config = entity.fields.find((f) => f.name === "config")!;
+    expect(config.tsType).toBe("string");
+    expect(config.nullable).toBe(false);
+  });
+
+  it("maps a nullable JSON field to string | null in generated output", () => {
+    const out = generateIndexFile(analyzeEntities([jsonEntity]), "@pylo/node");
+    expect(out).toContain("metadata: string | null;");
+    expect(out).not.toContain("Record<string, unknown> | unknown[]");
+  });
+});
+
 describe("generateIndexFile — schema registration", () => {
   it("registers the schema for @pylo/node and @pylo/nextjs", () => {
     for (const source of ["@pylo/node", "@pylo/nextjs"]) {

@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.1.1
+
+### Patch Changes
+
+- fixed json fields in schema generation
+
 ## 0.0.14
 
 ### Patch Changes

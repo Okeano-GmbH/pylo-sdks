@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.1.1
+
+### Patch Changes
+
+- fixed json fields in schema generation
+- Updated dependencies
+  - @pylo/core@0.1.1
+
 ## 0.0.15
 
 ### Patch Changes
