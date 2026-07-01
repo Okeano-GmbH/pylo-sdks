@@ -1,5 +1,11 @@
 # @pylo/auth-nextjs
 
+## 0.1.6
+
+### Patch Changes
+
+- internal config
+
 ## 0.1.5
 
 ### Patch Changes

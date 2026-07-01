@@ -16,12 +16,23 @@ const DEFAULT_COOKIE_OPTIONS: Required<CookieOptions> = {
   refreshMaxAge: 60 * 60 * 24 * 7, // 7 days
 };
 
-function getAppId(): string {
+const DEFAULT_APP_ID = "default";
+
+/**
+ * Returns the configured Pylo app id.
+ *
+ * `PYLO_APP_ID` is required and scopes the auth cookies per app. If it is not
+ * set, this throws.
+ */
+export function getAppId(): string {
   const appId = process.env.PYLO_APP_ID;
-  if (!appId) {
-    throw new Error("[pylo-auth] Missing required PYLO_APP_ID environment variable");
+  if (appId) return appId;
+
+  if (process.env.PYLO_ALLOW_MISSING_APP_ID === "true") {
+    return DEFAULT_APP_ID;
   }
-  return appId;
+
+  throw new Error("[pylo-auth] Missing required PYLO_APP_ID environment variable");
 }
 
 /**

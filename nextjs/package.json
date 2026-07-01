@@ -1,6 +1,6 @@
 {
   "name": "@pylo/nextjs",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Type-safe Next.js SDK for Pylo — server client, React Query hooks, API route handler",
   "type": "module",
   "bin": {
