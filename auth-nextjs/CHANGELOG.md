@@ -1,5 +1,11 @@
 # @pylo/auth-nextjs
 
+## 0.1.5
+
+### Patch Changes
+
+- only clear cookies for failed refresh attempts due to invalid token
+
 ## 0.1.4
 
 ### Patch Changes

@@ -3,9 +3,12 @@ import type { NextRequest } from "next/server.js";
 import {
   isTokenExpired,
   graphqlRequest,
+  isUnauthorizedError,
+  extractErrorMessage,
   DEFAULT_GRAPHQL_ENDPOINT,
   REFRESH_TOKEN_MUTATION,
   type RefreshTokenResponse,
+  type GraphQLResponse,
   type PyloUser,
 } from "@pylo/auth";
 import type { PyloAuthOptions, AuthContext } from "./types.js";
@@ -172,17 +175,19 @@ export async function pyloAuth(
   const isExpired = !authToken || isTokenExpired(authToken, 10);
 
   // Store refresh result to avoid duplicate calls
-  let refreshResult: { success: boolean; authToken?: string; refreshToken?: string } | null = null;
+  let refreshResult: RefreshOutcome | null = null;
 
   if (isExpired && refreshToken) {
     // Token is expired, attempt to refresh
     refreshResult = await refreshTokens(graphqlEndpoint, refreshToken);
 
-    if (refreshResult.success && refreshResult.authToken && refreshResult.refreshToken) {
+    if (refreshResult.status === "refreshed") {
       // Refresh succeeded
       loggedIn = true;
-    } else {
-      // Refresh failed - clear cookies and signal to downstream code
+    } else if (refreshResult.status === "invalid") {
+      // The refresh token was genuinely rejected by the backend (expired /
+      // revoked / invalid) - end the session by clearing cookies and signal to
+      // downstream code.
       clearAuthCookiesOnResponse(response);
 
       // Set a header to signal that auth failed (for Server Actions/API routes that pass through)
@@ -195,6 +200,20 @@ export async function pyloAuth(
       clearAuthCookiesOnResponse(response);
 
       return { user: null, loggedIn: false, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
+    } else {
+      // Transient failure: the backend was unreachable / redeploying / returned
+      // a non-auth error. Do NOT clear cookies - keep the session intact so it
+      // recovers on the next request instead of logging the user out on a brief
+      // backend blip (e.g. during a deploy). Treat the user as still
+      // authenticated for this request; the (expired) access token is left in
+      // place and a later request will refresh it once the backend is healthy.
+      requestHeaders.set('x-pylo-auth-refresh-failed', 'true');
+      response = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+      loggedIn = true;
     }
   } else if (authToken && !isExpired) {
     // Valid token exists
@@ -202,7 +221,7 @@ export async function pyloAuth(
   }
 
   // If we refreshed, update the request cookies so route handlers see the new tokens
-  if (refreshResult?.success && refreshResult.authToken && refreshResult.refreshToken) {
+  if (refreshResult?.status === "refreshed") {
     // Parse existing cookies and update with new tokens
     const existingCookies = request.headers.get('cookie') || '';
     const cookiePairs = existingCookies.split(';').map(c => c.trim()).filter(Boolean);
@@ -238,30 +257,66 @@ export async function pyloAuth(
 }
 
 /**
- * Refresh tokens using the GraphQL API
+ * Outcome of a token refresh attempt.
+ *
+ * - `refreshed`: the backend issued a new token pair.
+ * - `invalid`:   the backend explicitly rejected the refresh token (expired /
+ *                revoked / invalid) - the session should be ended.
+ * - `error`:     a transient failure (network error, timeout, 5xx, non-JSON
+ *                body, or any non-auth GraphQL error). The session must be
+ *                preserved so it can recover on a later request.
+ */
+type RefreshOutcome =
+  | { status: "refreshed"; authToken: string; refreshToken: string }
+  | { status: "invalid" }
+  | { status: "error" };
+
+/**
+ * Refresh tokens using the GraphQL API.
+ *
+ * Critically, this distinguishes a genuine auth failure (the refresh token was
+ * rejected -> log out) from a transient backend problem (unreachable, mid-deploy,
+ * 5xx -> keep the session). Treating the two the same is what logs users out
+ * whenever the backend blips.
  */
 async function refreshTokens(
   endpoint: string,
   refreshToken: string
-): Promise<{ success: boolean; authToken?: string; refreshToken?: string }> {
+): Promise<RefreshOutcome> {
+  let response: GraphQLResponse<RefreshTokenResponse>;
+
   try {
-    const response = await graphqlRequest<RefreshTokenResponse>(
+    response = await graphqlRequest<RefreshTokenResponse>(
       endpoint,
       REFRESH_TOKEN_MUTATION,
       { input: { refresh_token: refreshToken } }
     );
-
-    if (response.data?.refreshToken?.data) {
-      return {
-        success: true,
-        authToken: response.data.refreshToken.data.auth_token,
-        refreshToken: response.data.refreshToken.data.refresh_token,
-      };
-    }
-
-    return { success: false };
   } catch (error) {
-    console.error('[pylo-auth] Token refresh error:', error);
-    return { success: false };
+    // fetch() rejected (network error / DNS / connection refused) or the body
+    // failed to parse as JSON (e.g. an HTML 5xx gateway page served while the
+    // backend redeploys). This is transient - never end the session over it.
+    console.error('[pylo-auth] Token refresh request failed (transient):', error);
+    return { status: "error" };
   }
+
+  const data = response.data?.refreshToken?.data;
+  if (data?.auth_token && data?.refresh_token) {
+    return {
+      status: "refreshed",
+      authToken: data.auth_token,
+      refreshToken: data.refresh_token,
+    };
+  }
+
+  // The server answered but returned no tokens. Only end the session when it
+  // explicitly reports an auth failure; anything else is treated as transient.
+  if (isUnauthorizedError(response)) {
+    return { status: "invalid" };
+  }
+
+  console.error(
+    '[pylo-auth] Token refresh returned no tokens (transient):',
+    extractErrorMessage(response.errors)
+  );
+  return { status: "error" };
 }
