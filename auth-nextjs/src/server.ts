@@ -2,6 +2,7 @@ import {
   graphqlRequest,
   hasErrors,
   extractErrorMessage,
+  isUnauthorizedError,
   DEFAULT_GRAPHQL_ENDPOINT,
   LOGIN_MUTATION,
   REFRESH_TOKEN_MUTATION,
@@ -235,16 +236,26 @@ export async function refreshTokens(): Promise<AuthResult> {
   );
 
   if (hasErrors(response)) {
-    await clearAuthCookies();
     const message = extractErrorMessage(response.errors) ?? "Refresh failed";
+    // Only end the session when the refresh token itself was rejected. A
+    // transient backend error (5xx, mid-deploy, etc.) must NOT clear cookies,
+    // otherwise every backend blip logs the user out.
+    if (isUnauthorizedError(response)) {
+      await clearAuthCookies();
+      return {
+        success: false,
+        error: { code: "TOKEN_EXPIRED", message },
+      };
+    }
     return {
       success: false,
-      error: { code: "TOKEN_EXPIRED", message },
+      error: { code: "SERVER_ERROR", message },
     };
   }
 
   if (!response.data) {
-    await clearAuthCookies();
+    // No errors but no data either - treat as a transient server problem and
+    // keep the session rather than logging the user out.
     return {
       success: false,
       error: { code: "SERVER_ERROR", message: "No data returned" },
