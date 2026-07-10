@@ -14,6 +14,7 @@ import {
 import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders, capitalize } from "@pylo/core";
 import {
   buildUpsertMutation,
+  buildBulkUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
   buildEventListQuery,
@@ -304,6 +305,53 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
+  // Upserts many rows of one entity in a single all-or-nothing transaction.
+  // Rows without an `id`/`__search_value` are created; the ids of the affected
+  // rows are returned in input order.
+  function usePyloBulkUpsert<E extends EntityName<S>>(
+    entity: E,
+    mutationOptions?: Omit<
+      UseMutationOptions<{ id: string }[], Error, UpsertInput<S, E>[]>,
+      "mutationFn"
+    > & MutationRequestOptions,
+  ): UseMutationResult<{ id: string }[], Error, UpsertInput<S, E>[]> {
+    const queryClient = useQueryClient();
+    const merged = mergeHeaders(
+      mergeHeaders(globalHeaders, mutationOptions?.headers),
+      flagsToHeaders(mutationOptions ?? {}),
+    );
+    const isDryRun = mutationOptions?.dryRun === true;
+
+    return useMutation({
+      ...mutationOptions,
+      mutationFn: async (inputs: UpsertInput<S, E>[]) => {
+        const pascalName = capitalize(entity as string);
+
+        const { query, variables } = buildBulkUpsertMutation(
+          entity as string,
+          pascalName,
+          inputs as Record<string, unknown>[],
+        );
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          { data: { id: string }[] }
+        >;
+
+        const mutationKey = `bulkUpdate${pascalName}`;
+        return data[mutationKey]!.data;
+      },
+      onSuccess: (data, variables, onMutateResult, context) => {
+        if (!isDryRun) {
+          void queryClient.invalidateQueries({
+            queryKey: ["pylo", entity],
+          });
+        }
+        mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
+      },
+    });
+  }
+
   function usePyloDelete<E extends EntityName<S>>(
     entity: E,
     mutationOptions?: Omit<
@@ -461,6 +509,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     usePyloInfiniteList,
     usePyloById,
     usePyloUpsert,
+    usePyloBulkUpsert,
     usePyloDelete,
     usePyloIngestEvents,
     usePyloEventList,

@@ -15,6 +15,7 @@ import {
 } from "./query-builder.js";
 import {
   buildUpsertMutation,
+  buildBulkUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
@@ -84,6 +85,14 @@ export interface EntityClient<S, E extends EntityName<S>> {
   ): Promise<EntityResult<S, E, Sel> | null>;
 
   upsert(input: UpsertInput<S, E>, options?: MutationRequestOptions): Promise<{ id: string }>;
+
+  // Upserts many rows in a single all-or-nothing transaction. Each element is
+  // upserted individually — rows without an `id`/`__search_value` are created —
+  // and the ids of the affected rows are returned in input order.
+  bulkUpsert(
+    inputs: UpsertInput<S, E>[],
+    options?: MutationRequestOptions,
+  ): Promise<{ id: string }[]>;
 
   delete(ids: string[], options?: MutationRequestOptions): Promise<{ success: boolean }>;
 }
@@ -229,6 +238,35 @@ function createEntityClient<S, E extends EntityName<S>>(
       );
 
       const mutationKey = `update${pascalName}`;
+      const result = data[mutationKey];
+      if (!result) {
+        throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);
+      }
+
+      return result.data;
+    },
+
+    async bulkUpsert(inputs, options) {
+      const pascalName = capitalize(entityKey);
+
+      const { query, variables } = buildBulkUpsertMutation(
+        entityKey,
+        pascalName,
+        inputs as Record<string, unknown>[],
+      );
+
+      const data = await executeGraphQL<Record<string, { data: { id: string }[] }>>(
+        endpoint,
+        query,
+        variables,
+        auth,
+        mergeHeaders(
+          mergeHeaders(globalHeaders, options?.headers),
+          flagsToHeaders(options ?? {}),
+        ),
+      );
+
+      const mutationKey = `bulkUpdate${pascalName}`;
       const result = data[mutationKey];
       if (!result) {
         throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);

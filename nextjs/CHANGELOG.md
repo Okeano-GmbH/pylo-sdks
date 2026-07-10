@@ -1,5 +1,16 @@
 # @pylo/nextjs
 
+## 0.2.0
+
+### Minor Changes
+
+- adds upsert functionality to sdks
+
+### Patch Changes
+
+- Updated dependencies
+  - @pylo/core@0.2.0
+
 ## 0.1.3
 
 ### Patch Changes

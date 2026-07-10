@@ -24,6 +24,29 @@ export function buildUpsertMutation(
   };
 }
 
+// Batch upsert: reuses the per-entity `Update${pascalName}Input` and the
+// backend `bulkUpdate${pascalName}` mutation, which upserts each element (rows
+// without an `id`/`__search_value` are created) inside a single all-or-nothing
+// transaction and returns the affected rows as a list.
+export function buildBulkUpsertMutation(
+  _entityKey: string,
+  pascalName: string,
+  inputs: Record<string, unknown>[],
+): BuildResult {
+  const mutation = `mutation BulkUpdate${pascalName}($inputs: [Update${pascalName}Input!]!) {
+  bulkUpdate${pascalName}(inputs: $inputs) {
+    data {
+      id
+    }
+  }
+}`;
+
+  return {
+    query: mutation,
+    variables: { inputs },
+  };
+}
+
 export function buildDeleteMutation(
   _entityKey: string,
   pascalName: string,

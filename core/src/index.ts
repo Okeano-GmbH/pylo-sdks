@@ -51,6 +51,7 @@ export {
 } from "./query-builder.js";
 export {
   buildUpsertMutation,
+  buildBulkUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
