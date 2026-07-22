@@ -27,6 +27,8 @@ export type {
 // SDK type system
 export type {
   EntityName,
+  CallableEntityName,
+  VirtualEntityName,
   EntityFields,
   EntityRelations,
   EntitySelect,
@@ -48,6 +50,7 @@ export {
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
+  buildMeQuery,
   capitalize,
 } from "./query-builder.js";
 export {
@@ -75,6 +78,7 @@ export type {
   EntityClient,
   IngestEvents,
   EventsClient,
+  Me,
   PyloClient,
 } from "./client.js";
 

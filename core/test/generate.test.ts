@@ -105,3 +105,47 @@ describe("generateIndexFile — schema registration", () => {
     expect(out).not.toContain("declare module");
   });
 });
+
+describe("generateIndexFile — virtual entities", () => {
+  const me: RawEntity = {
+    name: "Me",
+    shortcode: "me",
+    is_system_entity: true,
+    entity_fields: {
+      data: [field("id", "TEXT", "required"), field("authenticaton_method")],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  const out = () => generateIndexFile(analyzeEntities([contact, me]), "@pylo/node");
+
+  it("keeps the virtual entity's shape in PyloSchema", () => {
+    expect(out()).toContain("me: {");
+    expect(out()).toContain("authenticaton_method");
+  });
+
+  it("marks it virtual so the client can drop the key", () => {
+    expect(out()).toContain("virtual: true;");
+  });
+
+  it("gives it no create/update inputs", () => {
+    expect(out()).not.toContain("CreateMeInput");
+    expect(out()).not.toContain("UpdateMeInput");
+  });
+
+  it("leaves real entities callable and mutable", () => {
+    const generated = out();
+    expect(generated).toContain("createInput: CreateContactInput;");
+    expect(generated).toContain("updateInput: UpdateContactInput;");
+    expect(generated).toContain("export interface UpdateContactInput");
+  });
+
+  it("does not mark real entities virtual", () => {
+    const contactBlock = out().slice(
+      out().indexOf("contact: {"),
+      out().indexOf("me: {"),
+    );
+    expect(contactBlock).not.toContain("virtual");
+  });
+});

@@ -122,6 +122,8 @@ export type {
   PyloEventPropertyKeysOptions,
   PyloEventFieldValuesOptions,
   EntityName,
+  CallableEntityName,
+  VirtualEntityName,
   EntityFields,
   EntityRelations,
   EntitySelect,
@@ -139,6 +141,7 @@ export type {
   EntityClient,
   IngestEvents,
   EventsClient,
+  Me,
   PyloClient,
 } from "@pylo/core";
 

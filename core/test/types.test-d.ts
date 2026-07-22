@@ -1,6 +1,6 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { EntitySelect, EntityResult } from "../src/types.js";
-import type { EntityClient } from "../src/client.js";
+import type { EntityClient, PyloClient } from "../src/client.js";
 import type { FilterInput, PaginationData } from "../src/shared-types.js";
 
 // A hand-written schema mirroring the shape codegen emits for `PyloSchema`.
@@ -23,6 +23,13 @@ interface MockSchema {
     fields: { id: string; body: string };
     relations: { contacts: { type: "hasMany"; entity: "contact" } };
     updateInput: Record<string, never>;
+  };
+  // A virtual entity, as codegen emits it: full shape, `virtual: true`, and no
+  // create/update inputs because it has no mutation endpoints.
+  me: {
+    fields: { authenticaton_method: string };
+    relations: { current_user: { type: "hasOne"; entity: "contact" } };
+    virtual: true;
   };
 }
 
@@ -186,5 +193,54 @@ describe("EntityClient select inference", () => {
   it("still rejects `true` for a relation", async () => {
     // @ts-expect-error — relations require an explicit { select }
     await notes.list({ select: { contacts: true } });
+  });
+});
+
+describe("virtual entities", () => {
+  const client = {} as PyloClient<MockSchema>;
+
+  it("keeps real entities callable", () => {
+    expectTypeOf(client.contact).toHaveProperty("list");
+    expectTypeOf(client.note).toHaveProperty("byId");
+  });
+
+  it("drops the virtual entity from the client", () => {
+    // @ts-expect-error — `me` is virtual; it has no list/byId/upsert endpoints
+    expectTypeOf(client.me.list).toBeCallableWith({ select: { id: true } });
+  });
+
+  it("types me() from the select, like byId", async () => {
+    const me = await client.me({
+      select: {
+        authenticaton_method: true,
+        current_user: { select: { name: true } },
+      },
+    });
+    expectTypeOf(me).toEqualTypeOf<{
+      authenticaton_method: string;
+      current_user: { data: { name: string } } | null;
+    }>();
+  });
+
+  it("returns only the selected fields", async () => {
+    const me = await client.me({ select: { authenticaton_method: true } });
+    expectTypeOf(me).toEqualTypeOf<{ authenticaton_method: string }>();
+  });
+
+  it("rejects unknown keys in me's select", async () => {
+    // @ts-expect-error — `nope` is not a field on me
+    await client.me({ select: { nope: true } });
+  });
+
+  it("requires a select", async () => {
+    // @ts-expect-error — `select` is required, exactly as on byId
+    await client.me({});
+  });
+
+  it("accepts request options alongside select", async () => {
+    await client.me({
+      select: { authenticaton_method: true },
+      headers: { "x-trace": "1" },
+    });
   });
 });

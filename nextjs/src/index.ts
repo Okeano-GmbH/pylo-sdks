@@ -31,6 +31,8 @@ export type {
   PyloEventPropertyKeysOptions,
   PyloEventFieldValuesOptions,
   EntityName,
+  CallableEntityName,
+  VirtualEntityName,
   EntityFields,
   EntityRelations,
   EntitySelect,
@@ -42,6 +44,7 @@ export type {
   RequestOptions,
   MutationRequestOptions,
   IngestEvents,
+  Me,
 } from "@pylo/core";
 
 export { PyloError } from "@pylo/core";

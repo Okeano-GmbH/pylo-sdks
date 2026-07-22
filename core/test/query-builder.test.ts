@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildListQuery,
   buildByIdQuery,
+  buildMeQuery,
   capitalize,
 } from "../src/query-builder.js";
 
@@ -116,5 +117,52 @@ describe("capitalize", () => {
   it("recovers a PascalName from an entity key", () => {
     expect(capitalize("blogPost")).toBe("BlogPost");
     expect(capitalize("contact")).toBe("Contact");
+  });
+});
+
+describe("buildMeQuery", () => {
+  it("builds a `me` query with the requested fields", () => {
+    const { query, variables } = buildMeQuery({
+      select: { authenticaton_method: true },
+    });
+    expect(norm(query)).toContain("query Me { me { authenticaton_method }");
+    expect(variables).toEqual({});
+  });
+
+  it("does not wrap the payload in a `data` envelope", () => {
+    const { query } = buildMeQuery({ select: { id: true } });
+    expect(norm(query)).toContain("me { id }");
+    expect(norm(query)).not.toContain("me { data");
+  });
+
+  it("expands relations the same way byId does", () => {
+    const { query } = buildMeQuery({
+      select: { current_user: { select: { id: true, email: true } } },
+    });
+    expect(norm(query)).toContain("current_user { data { id email } }");
+  });
+
+  it("takes no id argument", () => {
+    const { query } = buildMeQuery({ select: { id: true } });
+    expect(query).not.toContain("$id");
+  });
+
+  it("declares variables for relation filters", () => {
+    const { query, variables } = buildMeQuery({
+      select: {
+        my_users: {
+          select: { id: true },
+          pagination: { per_page: 5 },
+        },
+      },
+    });
+    expect(query).toContain("query Me($");
+    expect(Object.keys(variables)).not.toHaveLength(0);
+  });
+
+  it("throws when no select is provided", () => {
+    expect(() => buildMeQuery(undefined)).toThrow(
+      /requires an explicit 'select'/,
+    );
   });
 });

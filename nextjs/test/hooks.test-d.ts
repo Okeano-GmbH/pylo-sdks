@@ -14,9 +14,16 @@ interface MockSchema {
     relations: { contacts: { type: "hasMany"; entity: "contact" } };
     updateInput: Record<string, never>;
   };
+  // A virtual entity, as codegen emits it: full shape, `virtual: true`, and no
+  // create/update inputs because it has no mutation endpoints.
+  me: {
+    fields: { authenticaton_method: string };
+    relations: { current_user: { type: "hasOne"; entity: "contact" } };
+    virtual: true;
+  };
 }
 
-const { usePyloList, usePyloInfiniteList, usePyloById } =
+const { usePyloList, usePyloInfiniteList, usePyloById, usePyloMe } =
   createPyloHooks<MockSchema>({});
 
 describe("usePyloList select inference", () => {
@@ -25,7 +32,8 @@ describe("usePyloList select inference", () => {
       select: { id: true, contacts: { select: { name: true } } },
     });
     expectTypeOf(data).toEqualTypeOf<
-      Array<{ id: string; contacts: { data: Array<{ name: string }> } }> | undefined
+      | Array<{ id: string; contacts: { data: Array<{ name: string }> } }>
+      | undefined
     >();
   });
 
@@ -41,7 +49,6 @@ describe("usePyloList select inference", () => {
       { data: Array<{ name: string }> } & { pagination: PaginationData }
     >();
   });
-
 });
 
 describe("usePyloById select inference", () => {
@@ -88,5 +95,50 @@ describe("hook strictness", () => {
   it("rejects `true` for a relation", () => {
     // @ts-expect-error — relations require an explicit { select }
     usePyloList("note", { select: { contacts: true } });
+  });
+});
+
+describe("usePyloMe", () => {
+  it("types the result from the select, like usePyloById", () => {
+    const { data } = usePyloMe({
+      select: {
+        authenticaton_method: true,
+        current_user: { select: { name: true } },
+      },
+    });
+    expectTypeOf(data).toEqualTypeOf<
+      | {
+          authenticaton_method: string;
+          current_user: { data: { name: string } } | null;
+        }
+      | undefined
+    >();
+  });
+
+  it("returns only the selected fields", () => {
+    const { data } = usePyloMe({ select: { authenticaton_method: true } });
+    expectTypeOf(data!).toEqualTypeOf<{ authenticaton_method: string }>();
+  });
+
+  it("requires a select", () => {
+    // @ts-expect-error — `select` is required, exactly as on usePyloById
+    usePyloMe({});
+  });
+
+  it("rejects unknown top-level keys", () => {
+    // @ts-expect-error — `nope` is not a field on me
+    usePyloMe({ select: { nope: true } });
+  });
+});
+
+describe("virtual entities are not reachable through entity hooks", () => {
+  it("rejects a virtual entity on usePyloList", () => {
+    // @ts-expect-error — `me` has no list endpoint
+    usePyloList("me", { select: { authenticaton_method: true } });
+  });
+
+  it("rejects a virtual entity on usePyloById", () => {
+    // @ts-expect-error — `me` has no byId endpoint
+    usePyloById("me", "id", { select: { authenticaton_method: true } });
   });
 });

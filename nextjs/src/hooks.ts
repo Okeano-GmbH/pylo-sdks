@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery, mergeHeaders, flagsToHeaders, capitalize } from "@pylo/core";
+import { buildListQuery, buildByIdQuery, buildMeQuery, mergeHeaders, flagsToHeaders, capitalize } from "@pylo/core";
 import {
   buildUpsertMutation,
   buildBulkUpsertMutation,
@@ -27,6 +27,7 @@ import type {
   PyloEventInput,
   FilterInput,
   EntityName,
+  CallableEntityName,
   EntitySelect,
   EntityResult,
   ListOptions,
@@ -56,7 +57,7 @@ interface ListHookResult<T> {
   refetch: UseQueryResult["refetch"];
 }
 
-type InfiniteListOptions<S, E extends EntityName<S>, Sel extends EntitySelect<S, E>> = {
+type InfiniteListOptions<S, E extends CallableEntityName<S>, Sel extends EntitySelect<S, E>> = {
   perPage?: number;
   select: Sel;
   filter?: FilterInput;
@@ -104,7 +105,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   const globalHeaders = options.headers;
 
   function usePyloList<
-    E extends EntityName<S>,
+    E extends CallableEntityName<S>,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -151,7 +152,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   }
 
   function usePyloInfiniteList<
-    E extends EntityName<S>,
+    E extends CallableEntityName<S>,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -229,7 +230,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   }
 
   function usePyloById<
-    E extends EntityName<S>,
+    E extends CallableEntityName<S>,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -261,7 +262,35 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
-  function usePyloUpsert<E extends EntityName<S>>(
+  // `me` is a virtual entity: it has no list/byId endpoints, so it is read
+  // through its own query. Types exactly like `usePyloById` — same required
+  // `select`, same result inference — minus the id, which the server resolves
+  // from the request credentials.
+  function usePyloMe<
+    const Sel extends SelectConstraint<S, "me" & EntityName<S>, Sel>,
+  >(
+    queryOptions: ByIdOptions<S, "me" & EntityName<S>, Sel> & RequestOptions,
+  ): UseQueryResult<EntityResult<S, "me" & EntityName<S>, Sel>> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: ["pylo", "me", { select: queryOptions?.select, headers: merged }],
+      queryFn: async () => {
+        const { query, variables } = buildMeQuery(
+          queryOptions as unknown as Record<string, unknown> | undefined,
+        );
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          unknown
+        >;
+
+        // Unlike `<entity>ById`, `me` is not wrapped in a `data` envelope.
+        return data["me"] as EntityResult<S, "me" & EntityName<S>, Sel>;
+      },
+    });
+  }
+
+  function usePyloUpsert<E extends CallableEntityName<S>>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }, Error, UpsertInput<S, E>>,
@@ -308,7 +337,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   // Upserts many rows of one entity in a single all-or-nothing transaction.
   // Rows without an `id`/`__search_value` are created; the ids of the affected
   // rows are returned in input order.
-  function usePyloBulkUpsert<E extends EntityName<S>>(
+  function usePyloBulkUpsert<E extends CallableEntityName<S>>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }[], Error, UpsertInput<S, E>[]>,
@@ -352,7 +381,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
-  function usePyloDelete<E extends EntityName<S>>(
+  function usePyloDelete<E extends CallableEntityName<S>>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ success: boolean }, Error, string[]>,
@@ -508,6 +537,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     usePyloList,
     usePyloInfiniteList,
     usePyloById,
+    usePyloMe,
     usePyloUpsert,
     usePyloBulkUpsert,
     usePyloDelete,

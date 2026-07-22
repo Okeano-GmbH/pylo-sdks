@@ -180,8 +180,11 @@ export function generateIndexFile(
     lines.push("");
   }
 
-  // Generate create/update input types for each entity
+  // Generate create/update input types for each entity. Virtual entities have
+  // no mutation endpoints, so they get no input types.
   for (const entity of entities) {
+    if (entity.isSystem) continue;
+
     lines.push(`export interface Create${entity.pascalName}Input {`);
     lines.push(indent(generateCreateInputType(entity), 1));
     lines.push("}", "");
@@ -206,8 +209,16 @@ export function generateIndexFile(
     }
     lines.push("    };");
 
-    lines.push(`    createInput: Create${entity.pascalName}Input;`);
-    lines.push(`    updateInput: Update${entity.pascalName}Input;`);
+    // `virtual: true` marks an entity that `entityList` reports but that has no
+    // list/byId/upsert/delete endpoints. Its shape stays in the schema so
+    // `select` still types against it, but `PyloClient` drops the key so it
+    // cannot be called. `me` is served by the dedicated `client.me()` instead.
+    if (entity.isSystem) {
+      lines.push("    virtual: true;");
+    } else {
+      lines.push(`    createInput: Create${entity.pascalName}Input;`);
+      lines.push(`    updateInput: Update${entity.pascalName}Input;`);
+    }
     lines.push("  };");
   }
   lines.push("}", "");

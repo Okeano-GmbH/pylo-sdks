@@ -11,6 +11,7 @@ import {
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
+  buildMeQuery,
   capitalize,
 } from "./query-builder.js";
 import {
@@ -37,6 +38,7 @@ import type {
   ByIdOptions,
   ListResult,
   SelectConstraint,
+  CallableEntityName,
   UpsertInput,
   RequestOptions,
   MutationRequestOptions,
@@ -126,11 +128,23 @@ export interface EventsClient {
   ): Promise<PyloEventFieldValue[]>;
 }
 
+// Reads the authenticated principal. `me` is a virtual entity — its shape comes
+// from the generated schema like any other entity, so `select` and the result
+// type work exactly as they do on `byId`, but it is reached through this
+// dedicated endpoint because there is no `meById`. Takes no id: the server
+// resolves the subject from the request's credentials.
+export type Me<S> = "me" extends EntityName<S>
+  ? <Sel extends SelectConstraint<S, "me" & EntityName<S>, Sel>>(
+      options: ByIdOptions<S, "me" & EntityName<S>, Sel> & RequestOptions,
+    ) => Promise<EntityResult<S, "me" & EntityName<S>, Sel>>
+  : never;
+
 export type PyloClient<S> = {
-  [E in EntityName<S>]: EntityClient<S, E>;
+  [E in CallableEntityName<S>]: EntityClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
   events: EventsClient;
+  me: Me<S>;
 };
 
 function getEndpoint(endpoint?: string): string {
@@ -389,6 +403,36 @@ function createEventsClient(
   };
 }
 
+function createMe<S>(
+  endpoint: string,
+  auth: AuthProvider,
+  globalHeaders?: Record<string, string>,
+): Me<S> {
+  const me = async (options: { select: unknown } & RequestOptions) => {
+    const { query, variables } = buildMeQuery(
+      options as unknown as Record<string, unknown>,
+    );
+
+    const data = await executeGraphQL<Record<string, unknown>>(
+      endpoint,
+      query,
+      variables,
+      auth,
+      mergeHeaders(globalHeaders, options?.headers),
+    );
+
+    // Unlike `<entity>ById`, `me` is not wrapped in a `data` envelope.
+    const result = data["me"];
+    if (result === undefined || result === null) {
+      throw new PyloError("Unexpected response shape — missing me");
+    }
+
+    return result;
+  };
+
+  return me as Me<S>;
+}
+
 export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const endpoint = getEndpoint(options.endpoint);
   const auth = options.auth;
@@ -396,12 +440,14 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
 
   const ingestEvents = createIngestEvents(endpoint, auth, globalHeaders);
   const events = createEventsClient(endpoint, auth, globalHeaders);
+  const me = createMe<S>(endpoint, auth, globalHeaders);
 
   return new Proxy({} as PyloClient<S>, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
       if (prop === "ingestEvents") return ingestEvents;
       if (prop === "events") return events;
+      if (prop === "me") return me;
       return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, globalHeaders);
     },
   });

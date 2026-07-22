@@ -9,6 +9,17 @@ import type {
 // Extract entity key strings from a PyloSchema
 export type EntityName<S> = string & keyof S;
 
+// Entities that `entityList` reports but that expose no list/byId/upsert/delete
+// endpoints — codegen marks them `virtual: true`. Their shape stays in the
+// schema so `select` and `EntityResult` still work (and so relations can point
+// at them), but they are dropped from `PyloClient` so they cannot be called.
+export type VirtualEntityName<S> = {
+  [E in EntityName<S>]: S[E] extends { virtual: true } ? E : never;
+}[EntityName<S>];
+
+// Entity keys reachable as `client.<key>`.
+export type CallableEntityName<S> = Exclude<EntityName<S>, VirtualEntityName<S>>;
+
 // Extract the scalar fields record for an entity
 export type EntityFields<S, E extends EntityName<S>> = S[E] extends {
   fields: infer F;

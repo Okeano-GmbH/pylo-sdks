@@ -332,3 +332,30 @@ export function buildEventFieldValuesQuery(
 
   return { query, variables };
 }
+
+// The `me` endpoint. `me` is a virtual entity: its shape lives in the generated
+// schema like any other entity, so the selection is built with the same
+// machinery as `byId`. It differs in two ways — there is no `id` argument (the
+// server resolves the subject from the credentials), and the payload is not
+// wrapped in a `data` envelope.
+export function buildMeQuery(options: ByIdOptionsInput | undefined): BuildResult {
+  const select = requireSelect("me", "me", options?.select);
+
+  const variables: Record<string, unknown> = {};
+  const variableTypes = new Map<string, string>();
+
+  const selectionSet = buildSelectionSet(select, variables, variableTypes, "r_");
+
+  const varDecls = Array.from(variableTypes.entries())
+    .map(([name, type]) => `$${name}: ${type}`)
+    .join(", ");
+  const varSection = varDecls ? `(${varDecls})` : "";
+
+  const query = `query Me${varSection} {
+  me {
+    ${selectionSet}
+  }
+}`;
+
+  return { query, variables };
+}
