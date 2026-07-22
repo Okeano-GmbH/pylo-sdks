@@ -30,7 +30,8 @@ function getVariantFieldNames(entity: AnalyzedEntity): string[] {
     .map((f) => f.variantFieldName!);
 }
 
-// None writeable fields to replace variables
+// None writeable fields to replace variables. `id` is deliberately absent — it
+// is settable on an update input and its template variables do get resolved.
 const NON_WRITABLE_FIELDS = new Set(["integer_id", "created_at", "updated_at"]);
 
 // The `replace_variables` field for an update input: a typed list of the

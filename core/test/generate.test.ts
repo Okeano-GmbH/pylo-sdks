@@ -36,17 +36,22 @@ describe("generateIndexFile — replace_variables", () => {
   const block = updateInputOf("@pylo/node");
 
   it("adds a typed replace_variables field to the update input", () => {
-    expect(block).toContain("replace_variables?: Array<'first_name' | 'body'>");
+    expect(block).toContain(
+      "replace_variables?: Array<'id' | 'first_name' | 'body'>",
+    );
   });
 
-  it("excludes system-managed columns from the field-name union", () => {
+  // `id` is settable on an update input and its template variables are resolved,
+  // so it belongs in the union — only the server-managed columns are excluded.
+  it("excludes server-managed columns from the field-name union", () => {
     const union = block.slice(
       block.indexOf("replace_variables"),
       block.indexOf(";", block.indexOf("replace_variables")),
     );
-    for (const sys of ["'id'", "'integer_id'", "'created_at'", "'updated_at'"]) {
+    for (const sys of ["'integer_id'", "'created_at'", "'updated_at'"]) {
       expect(union).not.toContain(sys);
     }
+    expect(union).toContain("'id'");
   });
 
   it("documents the field with a JSDoc comment", () => {
