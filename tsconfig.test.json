@@ -3,12 +3,19 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2020",
-    "types": [],
+    "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // Type tests pull in `src`, so workspace imports must resolve to `src` too —
+    // otherwise they hit a `dist` that is only as fresh as the last build.
+    "paths": {
+      "@pylo/core": ["./core/src/index.ts"],
+      "@pylo/auth": ["./auth/src/index.ts"],
+      "@pylo/auth-nextjs": ["./auth-nextjs/src/index.ts"]
+    }
   },
   "include": ["**/test/**/*.test-d.ts"],
   "exclude": ["node_modules", "**/dist"]

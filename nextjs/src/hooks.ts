@@ -32,7 +32,7 @@ import type {
   ListOptions,
   ByIdOptions,
   UpsertInput,
-  StrictSelect,
+  SelectConstraint,
   RequestOptions,
   MutationRequestOptions,
   EventListOptions,
@@ -58,7 +58,7 @@ interface ListHookResult<T> {
 
 type InfiniteListOptions<S, E extends EntityName<S>, Sel extends EntitySelect<S, E>> = {
   perPage?: number;
-  select: StrictSelect<Sel, EntitySelect<S, E>>;
+  select: Sel;
   filter?: FilterInput;
 } & RequestOptions;
 
@@ -105,7 +105,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
   function usePyloList<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E>,
+    const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
     queryOptions: ListOptions<S, E, Sel> & RequestOptions,
@@ -152,7 +152,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
   function usePyloInfiniteList<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E>,
+    const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
     infiniteOptions: InfiniteListOptions<S, E, Sel>,
@@ -230,7 +230,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
   function usePyloById<
     E extends EntityName<S>,
-    Sel extends EntitySelect<S, E>,
+    const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
     id: string | null | undefined,

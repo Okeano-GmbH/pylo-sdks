@@ -1,5 +1,7 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { EntitySelect, EntityResult } from "../src/types.js";
+import type { EntityClient } from "../src/client.js";
+import type { FilterInput, PaginationData } from "../src/shared-types.js";
 
 // A hand-written schema mirroring the shape codegen emits for `PyloSchema`.
 // Codegen emits `relations: {}` for entities with no relations; `keyof {}` is
@@ -92,5 +94,97 @@ describe("EntityResult", () => {
     expectTypeOf<
       Result<"note", typeof sel>["contacts"]
     >().toHaveProperty("pagination");
+  });
+});
+
+// These go through the client signature, where `Sel` is inferred from the
+// argument. `EntityResult` on its own was always correct — only inference lost
+// relations that carried a `filter` or `pagination` key.
+describe("EntityClient select inference", () => {
+  const notes = {} as EntityClient<MockSchema, "note">;
+  const contacts = {} as EntityClient<MockSchema, "contact">;
+
+  it("keeps a hasMany relation in the result type", async () => {
+    const { data } = await notes.list({
+      select: { id: true, contacts: { select: { name: true } } },
+    });
+    expectTypeOf(data[0]!).toEqualTypeOf<{
+      id: string;
+      contacts: { data: Array<{ name: string }> };
+    }>();
+  });
+
+  it("keeps a hasMany relation when `pagination` is also selected", async () => {
+    const { data } = await notes.list({
+      select: {
+        id: true,
+        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+      },
+    });
+    expectTypeOf(data[0]!.id).toEqualTypeOf<string>();
+    expectTypeOf(data[0]!.contacts).toEqualTypeOf<
+      { data: Array<{ name: string }> } & { pagination: PaginationData }
+    >();
+  });
+
+  it("keeps a hasMany relation when `filter` is also selected", async () => {
+    const { data } = await notes.list({
+      select: {
+        id: true,
+        contacts: { select: { name: true }, filter: {} as FilterInput },
+      },
+    });
+    expectTypeOf(data[0]!).toEqualTypeOf<{
+      id: string;
+      contacts: { data: Array<{ name: string }> };
+    }>();
+  });
+
+  it("keeps relations on byId with `pagination` selected", async () => {
+    const row = await notes.byId("id", {
+      select: {
+        id: true,
+        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+      },
+    });
+    expectTypeOf(row).not.toBeNever();
+    expectTypeOf(row!.id).toEqualTypeOf<string>();
+    expectTypeOf(row!.contacts).toEqualTypeOf<
+      { data: Array<{ name: string }> } & { pagination: PaginationData }
+    >();
+  });
+
+  it("keeps a hasOne relation when its `filter` is also selected", async () => {
+    const { data } = await contacts.list({
+      select: {
+        name: true,
+        company: { select: { name: true }, filter: {} as FilterInput },
+      },
+    });
+    expectTypeOf(data[0]!).toEqualTypeOf<{
+      name: string;
+      company: { data: { name: string } } | null;
+    }>();
+  });
+
+  it("still rejects unknown keys in an inline select", async () => {
+    // @ts-expect-error — `nope` is not a field on note
+    await notes.list({ select: { id: true, nope: true } });
+  });
+
+  it("still rejects unknown keys when the select is a variable", async () => {
+    const sel: { id: true; nope: true } = { id: true, nope: true };
+    // @ts-expect-error — `nope` is not a field on note
+    await notes.list({ select: sel });
+  });
+
+  it("still rejects unknown keys nested inside a relation select", async () => {
+    // @ts-expect-error — `nope` is not a field on contact
+    await notes.list({ select: { contacts: { select: { nope: true } } } });
+  });
+
+  it("still rejects `true` for a relation", async () => {
+    // @ts-expect-error — relations require an explicit { select }
+    await notes.list({ select: { contacts: true } });
   });
 });

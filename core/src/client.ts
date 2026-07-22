@@ -32,11 +32,11 @@ import type {
 } from "./shared-types.js";
 import type {
   EntityName,
-  EntitySelect,
   EntityResult,
   ListOptions,
   ByIdOptions,
   ListResult,
+  SelectConstraint,
   UpsertInput,
   RequestOptions,
   MutationRequestOptions,
@@ -75,11 +75,11 @@ export interface ClientOptions {
 }
 
 export interface EntityClient<S, E extends EntityName<S>> {
-  list<Sel extends EntitySelect<S, E>>(
+  list<Sel extends SelectConstraint<S, E, Sel>>(
     options: ListOptions<S, E, Sel> & RequestOptions,
   ): Promise<ListResult<EntityResult<S, E, Sel>>>;
 
-  byId<Sel extends EntitySelect<S, E>>(
+  byId<Sel extends SelectConstraint<S, E, Sel>>(
     id: string,
     options: ByIdOptions<S, E, Sel> & RequestOptions,
   ): Promise<EntityResult<S, E, Sel> | null>;

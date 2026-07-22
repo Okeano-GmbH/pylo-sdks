@@ -160,14 +160,17 @@ type RelationResult<
       : never;
 };
 
-// Rejects unknown keys by mapping them to `never`.
-// Intersected with the base type so IDE still suggests valid keys.
-export type StrictSelect<
-  Sel,
-  Valid,
-> = Valid & {
-  [K in keyof Sel]: K extends keyof Valid ? Sel[K] : never;
-};
+// Rejects unknown keys. Belongs in a type parameter's *constraint*, never as the
+// declared type of `select` — an intersection there becomes the only inference
+// site for `Sel`, and reverse-mapping it drops relations that carry `filter` or
+// `pagination` from `EntityResult`.
+export type NoExcess<Sel, Valid> = Record<Exclude<keyof Sel, keyof Valid>, never>;
+
+export type SelectConstraint<S, E extends EntityName<S>, Sel> = EntitySelect<
+  S,
+  E
+> &
+  NoExcess<Sel, EntitySelect<S, E>>;
 
 // Options for list queries. `select` is required — there is no implicit
 // "all fields" default.
@@ -176,7 +179,7 @@ export type ListOptions<
   E extends EntityName<S>,
   Sel extends EntitySelect<S, E>,
 > = {
-  select: StrictSelect<Sel, EntitySelect<S, E>>;
+  select: Sel;
   filter?: FilterInput;
   pagination?: PaginationInput;
 };
@@ -187,7 +190,7 @@ export type ByIdOptions<
   E extends EntityName<S>,
   Sel extends EntitySelect<S, E>,
 > = {
-  select: StrictSelect<Sel, EntitySelect<S, E>>;
+  select: Sel;
 };
 
 // List result with pagination
