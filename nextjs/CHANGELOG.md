@@ -1,5 +1,63 @@
 # @pylo/nextjs
 
+## 0.2.2
+
+### Patch Changes
+
+- Add `client.me()`, and make virtual entities uncallable
+
+  `entityList` returns virtual entities such as `me` and `pyloEventData` alongside
+  real ones. Codegen emitted them like any other entity, so the generated schema
+  advertised `client.me.list()` and `client.pyloEventData.upsert()` — calls that
+  can never succeed, because these entities have no endpoints.
+
+  Codegen now marks entities flagged `is_system_entity` with `virtual: true` in
+  `PyloSchema` and emits no create/update input types for them. Their field and
+  relation shapes stay in the schema, so `select` and `EntityResult` keep working
+  against them; `PyloClient` drops the keys, so `client.me` / `client.pyloEventData`
+  are no longer callable as entities. The `usePylo*` hooks are constrained the
+  same way.
+
+  `me` is served by a dedicated endpoint that types exactly like `byId` — same
+  required `select`, same result inference, no `id` argument (the server resolves
+  the subject from the request credentials):
+
+  ```ts
+  const me = await client.me({
+    select: {
+      authenticaton_method: true,
+      current_user: { select: { id: true, email: true } },
+      my_users: { select: { id: true }, pagination: { per_page: 10 } },
+    },
+  });
+  me.current_user?.data.email;
+  ```
+
+  The selection is built with the same machinery as `byId`, so relations, nested
+  selects, filters and pagination all behave identically. Unlike `<entity>ById`,
+  the `me` payload is not wrapped in a `data` envelope.
+
+  `@pylo/nextjs` gains a matching `usePyloMe` hook with the same signature minus
+  the id:
+
+  ```ts
+  const { data, isLoading } = usePyloMe({
+    select: {
+      authenticaton_method: true,
+      current_user: { select: { email: true } },
+    },
+  });
+  ```
+
+  New exported types: `Me`, `CallableEntityName`, `VirtualEntityName`. The
+  `buildMeQuery` builder is exported from `@pylo/core` alongside `buildByIdQuery`.
+
+  `@pylo/auth` keeps its own narrower `ME_QUERY` for the login flow, so
+  `getUser()` in `@pylo/auth-nextjs` is unchanged.
+
+- Updated dependencies
+  - @pylo/core@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes
