@@ -66,6 +66,62 @@ export function evaluateConditionTree(
   return true;
 }
 
+type OrderingOperator =
+  | "greaterThan"
+  | "lessThan"
+  | "greaterThanOrEqual"
+  | "lessThanOrEqual";
+
+/** ISO date or date-time. Anchored, so a plain value like "10" never matches. */
+const ISO_DATE =
+  /^\d{4}-\d{2}-\d{2}(?:([T ])\d{2}:\d{2}:\d{2}(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/** Epoch millis for an ISO date/date-time string, else undefined. */
+function toInstant(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+
+  const match = ISO_DATE.exec(value);
+  if (!match) return undefined;
+
+  // A date-only value already parses as UTC, but a date-time with no zone would
+  // parse as local time — pin it to UTC so results don't vary by host timezone.
+  const [, time, zone] = match;
+  const instant = Date.parse(
+    value.replace(" ", "T") + (time && !zone ? "Z" : "")
+  );
+
+  return Number.isNaN(instant) ? undefined : instant;
+}
+
+/**
+ * Orders two operands, as instants when both are ISO date strings and raw
+ * otherwise. Without this, dates order lexicographically, so "2026-07-23" is
+ * not >= "2026-07-23T00:00:00.000Z" despite being the same moment.
+ */
+function compareOrder(
+  a: unknown,
+  b: unknown,
+  operator: OrderingOperator
+): boolean {
+  const instantA = toInstant(a);
+  const instantB = toInstant(b);
+  const [x, y]: [any, any] =
+    instantA !== undefined && instantB !== undefined
+      ? [instantA, instantB]
+      : [a, b];
+
+  switch (operator) {
+    case "greaterThan":
+      return x > y;
+    case "lessThan":
+      return x < y;
+    case "greaterThanOrEqual":
+      return x >= y;
+    case "lessThanOrEqual":
+      return x <= y;
+  }
+}
+
 function evaluateOperator(
   fieldValue: any,
   operator: FilterOperatorsType,
@@ -78,13 +134,10 @@ function evaluateOperator(
       case "notEqual":
         return a !== value;
       case "greaterThan":
-        return a > value;
       case "lessThan":
-        return a < value;
       case "greaterThanOrEqual":
-        return a >= value;
       case "lessThanOrEqual":
-        return a <= value;
+        return compareOrder(a, value, operator);
       case "isNull":
         return a == null;
       case "isNotNull":
