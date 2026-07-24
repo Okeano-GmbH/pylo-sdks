@@ -1,9 +1,17 @@
 // Shared types used by both codegen output and runtime SDK.
 // These never change per schema.
 
-// Mutation field suffixes for relations. hasOne relations only support `_set`;
-// hasMany relations support all three.
-export const RELATION_SUFFIXES = ["_set", "_connect", "_disconnect"] as const;
+// Mutation field suffixes for relations. hasOne relations only support `_set`.
+// hasMany relations also take a pair for attaching/detaching rows, which the
+// schema names `_connect`/`_disconnect` — except between two Pylo system
+// entities, where it is `_add`/`_remove`.
+export const RELATION_SUFFIXES = [
+  "_set",
+  "_connect",
+  "_disconnect",
+  "_add",
+  "_remove",
+] as const;
 export type RelationSuffix = (typeof RELATION_SUFFIXES)[number];
 
 export type QueryOperator =

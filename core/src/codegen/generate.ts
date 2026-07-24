@@ -34,23 +34,36 @@ function getVariantFieldNames(entity: AnalyzedEntity): string[] {
 // is settable on an update input and its template variables do get resolved.
 const NON_WRITABLE_FIELDS = new Set(["integer_id", "created_at", "updated_at"]);
 
-// The `replace_variables` field for an update input: a typed list of the
-// entity's writable field names whose template variables the server should
-// resolve during the upsert. Returns the commented TS lines, or `null` when the
-// entity has no writable fields.
-function generateReplaceVariablesField(entity: AnalyzedEntity): string | null {
+// The `__replace_vars` field: a list of the field names whose template
+// variables the server should resolve during the upsert. The schema declares it
+// as `[String!]`; narrowing to a union of the entity's own field names is a
+// strict subtype, so it stays wire-compatible while giving autocomplete.
+//
+// `id` is only offered where it can actually be set — the create input has no
+// `id` field, so a template could never land in one.
+//
+// An entity whose content is all relations has no field name to narrow to; the
+// key still exists on the schema's input, so it falls back to the declared
+// `[String!]` rather than being dropped.
+function generateReplaceVarsField(
+  entity: AnalyzedEntity,
+  options: { includeId: boolean },
+): string {
   const fieldNames = entity.fields
     .map((f) => f.name)
-    .filter((name) => !NON_WRITABLE_FIELDS.has(name));
-  if (fieldNames.length === 0) return null;
+    .filter((name) => !NON_WRITABLE_FIELDS.has(name))
+    .filter((name) => options.includeId || name !== "id");
 
-  const union = fieldNames.map((name) => `'${name}'`).join(" | ");
+  const union =
+    fieldNames.length > 0
+      ? fieldNames.map((name) => `'${name}'`).join(" | ")
+      : "string";
   return [
     "/**",
     " * Field names whose template variables (e.g. `${replace_uuid.myNewEntity}`) the server",
     " * should resolve to their concrete values during this upsert.",
     " */",
-    `replace_variables?: Array<${union}>;`,
+    `__replace_vars?: Array<${union}>;`,
   ].join("\n");
 }
 
@@ -71,7 +84,12 @@ function generateEntityRelationsType(entity: AnalyzedEntity): string {
   return lines.join("\n");
 }
 
-function generateCreateInputType(entity: AnalyzedEntity): string {
+const SEARCH_VALUE_FIELD =
+  "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };";
+
+// The writable scalar columns — `id` and the server-managed ones are handled
+// separately (or not at all).
+function generateScalarFields(entity: AnalyzedEntity): string[] {
   const lines: string[] = [];
 
   for (const field of entity.fields) {
@@ -84,53 +102,62 @@ function generateCreateInputType(entity: AnalyzedEntity): string {
     lines.push(`${variantName}?: ${VARIANT_TYPE}[];`);
   }
 
+  return lines;
+}
+
+// The `<relation><suffix>` keys that upsert a relation. Their value is the
+// target entity's own input type, exactly as the GraphQL schema declares it:
+//
+//   hasOne    <rel>_set: <Target>Input
+//   hasMany   <rel>_set / _connect / _disconnect: [<Target>Input!]
+//
+// Note this is the *bare* `<Target>Input`, not `Update<Target>Input` — a
+// distinct type that carries the identifiers plus the target's own fields and
+// relations, so nested upserts type-check all the way down.
+function generateRelationFields(entity: AnalyzedEntity): string[] {
+  const lines: string[] = [];
+
   for (const rel of entity.relations) {
+    const target = `${rel.targetEntityPascalName}Input`;
+    const valueType = rel.type === "hasMany" ? `${target}[]` : target;
     for (const suffix of rel.suffixes) {
-      const valueType =
-        rel.type === "hasMany"
-          ? "Record<string, unknown>[]"
-          : "Record<string, unknown>";
       lines.push(`${rel.fieldName}${suffix}?: ${valueType};`);
     }
   }
+
+  return lines;
+}
+
+// The bare `<Entity>Input` — what every relation key points at. It identifies a
+// row (`id` / `__search_value`) and can create or update it, so it carries the
+// same body as the update input. Emitted for *every* entity, including virtual
+// ones: they have no mutation endpoints of their own, but relations still
+// target them, so the type has to exist.
+function generateEntityInputType(entity: AnalyzedEntity): string {
+  const lines: string[] = ["id?: string;", SEARCH_VALUE_FIELD];
+
+  lines.push(generateReplaceVarsField(entity, { includeId: true }));
+
+  lines.push(...generateScalarFields(entity), ...generateRelationFields(entity));
+
+  return lines.join("\n");
+}
+
+// The SDK's only mutation is `upsert`, so nothing here consumes the create
+// input — but the backend does expose `create<Entity>` mutations and projects
+// call them directly through their generated types, so it stays emitted.
+function generateCreateInputType(entity: AnalyzedEntity): string {
+  const lines: string[] = [
+    generateReplaceVarsField(entity, { includeId: false }),
+  ];
+
+  lines.push(...generateScalarFields(entity), ...generateRelationFields(entity));
 
   return lines.join("\n");
 }
 
 function generateUpdateInputType(entity: AnalyzedEntity): string {
-  const lines: string[] = [];
-
-  lines.push("id?: string;");
-  lines.push(
-    "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };",
-  );
-
-  const replaceVariables = generateReplaceVariablesField(entity);
-  if (replaceVariables) {
-    lines.push(replaceVariables);
-  }
-
-  for (const field of entity.fields) {
-    if (field.name === "id" || field.name === "integer_id") continue;
-    if (field.name === "created_at" || field.name === "updated_at") continue;
-    lines.push(`${field.name}?: ${fieldTypeString(field)};`);
-  }
-
-  for (const variantName of getVariantFieldNames(entity)) {
-    lines.push(`${variantName}?: ${VARIANT_TYPE}[];`);
-  }
-
-  for (const rel of entity.relations) {
-    for (const suffix of rel.suffixes) {
-      const valueType =
-        rel.type === "hasMany"
-          ? "Record<string, unknown>[]"
-          : "Record<string, unknown>";
-      lines.push(`${rel.fieldName}${suffix}?: ${valueType};`);
-    }
-  }
-
-  return lines.join("\n");
+  return generateEntityInputType(entity);
 }
 
 function collectEnumTypes(
@@ -180,8 +207,17 @@ export function generateIndexFile(
     lines.push("");
   }
 
+  // The bare `<Entity>Input` is the payload of every relation upsert key, so it
+  // exists for virtual entities too — a relation can point at one even though it
+  // has no mutation endpoints of its own.
+  for (const entity of entities) {
+    lines.push(`export interface ${entity.pascalName}Input {`);
+    lines.push(indent(generateEntityInputType(entity), 1));
+    lines.push("}", "");
+  }
+
   // Generate create/update input types for each entity. Virtual entities have
-  // no mutation endpoints, so they get no input types.
+  // no mutation endpoints, so they get no create/update inputs.
   for (const entity of entities) {
     if (entity.isSystem) continue;
 

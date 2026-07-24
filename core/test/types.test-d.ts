@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from "vitest";
-import type { EntitySelect, EntityResult } from "../src/types.js";
+import type { EntitySelect, EntityResult, UpsertInput } from "../src/types.js";
 import type { EntityClient, PyloClient } from "../src/client.js";
 import type { FilterInput, PaginationData } from "../src/shared-types.js";
 
@@ -8,21 +8,49 @@ import type { FilterInput, PaginationData } from "../src/shared-types.js";
 // `never`, so model that with `Record<never, never>` (NOT `Record<string,
 // never>`, whose key is `string`).
 type NoRelations = Record<never, never>;
+
+// Mirrors the shape codegen emits for the mutation inputs: the scalar fields,
+// the id/__search_value identifiers, and one `<relation><suffix>` key per
+// relation suffix, each carrying the bare `<Target>Input` — `CompanyInput` for
+// a hasOne `_set`, `ContactInput[]` for the hasMany suffixes, exactly as the
+// GraphQL schema declares them. The bare input doubles as the update input.
+type SearchValue = { field: string; value?: string };
+interface CompanyInput {
+  id?: string;
+  __search_value?: SearchValue;
+  name?: string;
+}
+interface ContactInput {
+  id?: string;
+  __search_value?: SearchValue;
+  name?: string;
+  email?: string;
+  company_set?: CompanyInput;
+}
+interface NoteInput {
+  id?: string;
+  __search_value?: SearchValue;
+  body?: string;
+  contacts_set?: ContactInput[];
+  contacts_connect?: ContactInput[];
+  contacts_disconnect?: ContactInput[];
+}
+
 interface MockSchema {
   company: {
     fields: { id: string; name: string };
     relations: NoRelations;
-    updateInput: Record<string, never>;
+    updateInput: CompanyInput;
   };
   contact: {
     fields: { id: string; name: string; email: string };
     relations: { company: { type: "hasOne"; entity: "company" } };
-    updateInput: Record<string, never>;
+    updateInput: ContactInput;
   };
   note: {
     fields: { id: string; body: string };
     relations: { contacts: { type: "hasMany"; entity: "contact" } };
-    updateInput: Record<string, never>;
+    updateInput: NoteInput;
   };
   // A virtual entity, as codegen emits it: full shape, `virtual: true`, and no
   // create/update inputs because it has no mutation endpoints.
@@ -193,6 +221,61 @@ describe("EntityClient select inference", () => {
   it("still rejects `true` for a relation", async () => {
     // @ts-expect-error — relations require an explicit { select }
     await notes.list({ select: { contacts: true } });
+  });
+});
+
+// Relation upserts. `MockSchema`'s update inputs mirror what codegen emits
+// today — relation payloads are `Record<string, unknown>`, so nothing about the
+// nested object is checked. These assertions describe what the GraphQL schema
+// already promises (`company_set: CompanyInput`, `contacts_set:
+// [ContactInput!]`) and fail until codegen emits it.
+describe("upsert relation input", () => {
+  const contacts = {} as EntityClient<MockSchema, "contact">;
+  const notes = {} as EntityClient<MockSchema, "note">;
+
+  it("accepts a typed nested payload on a hasOne _set", async () => {
+    await contacts.upsert({ company_set: { name: "Acme" } });
+  });
+
+  it("rejects an unknown field inside a hasOne _set", async () => {
+    // @ts-expect-error — `nmae` is not a field on company
+    await contacts.upsert({ company_set: { nmae: "Acme" } });
+  });
+
+  // `Record<string, unknown>` would satisfy `toHaveProperty("name")` — the
+  // property has to carry the target field's real type for autocomplete to
+  // mean anything.
+  it("types the nested payload with the target entity's field types", () => {
+    expectTypeOf<
+      NonNullable<UpsertInput<MockSchema, "contact">["company_set"]>["name"]
+    >().toEqualTypeOf<string | undefined>();
+  });
+
+  it("takes an array on a hasMany _set/_connect/_disconnect", async () => {
+    await notes.upsert({
+      contacts_set: [{ email: "a@b.c" }],
+      contacts_connect: [{ id: "ct_1" }],
+      contacts_disconnect: [{ id: "ct_2" }],
+    });
+  });
+
+  it("rejects an unknown field inside a hasMany payload", async () => {
+    // @ts-expect-error — `emial` is not a field on contact
+    await notes.upsert({ contacts_set: [{ emial: "a@b.c" }] });
+  });
+
+  it("still allows identifying a relation row by __search_value", async () => {
+    await contacts.upsert({
+      company_set: { __search_value: { field: "name", value: "Acme" } },
+    });
+  });
+
+  // The schema's `<X>Input` types reference each other, so a nested payload can
+  // keep upserting further relations all the way down.
+  it("allows a relation upsert nested inside a relation upsert", async () => {
+    await notes.upsert({
+      contacts_set: [{ name: "Ada", company_set: { name: "Acme" } }],
+    });
   });
 });
 

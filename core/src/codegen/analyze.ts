@@ -68,11 +68,25 @@ function classifyReverseRelation(
   return "hasMany";
 }
 
-function getMutationSuffixes(relType: "hasOne" | "hasMany"): string[] {
+// A hasOne relation exposes only `_set` — there is nothing to attach or detach
+// when the slot holds a single row.
+//
+// A hasMany relation also exposes an attach/detach pair. The schema names it
+// `_connect`/`_disconnect`, except when the relation runs between two Pylo
+// *system* entities, where it is `_add`/`_remove`. Both endpoints have to be
+// system entities: `PyloUser.pylo_aros` (system → system) is `_add`/`_remove`,
+// while `PyloUser.comments` (system → business) and `RecyclingCompany.pylo_users`
+// (business → system) are both `_connect`/`_disconnect`.
+function getMutationSuffixes(
+  relType: "hasOne" | "hasMany",
+  bothSystem: boolean,
+): string[] {
   if (relType === "hasOne") {
     return ["_set"];
   }
-  return ["_set", "_connect", "_disconnect"];
+  return bothSystem
+    ? ["_set", "_add", "_remove"]
+    : ["_set", "_connect", "_disconnect"];
 }
 
 function toEntityKey(pascalName: string): string {
@@ -115,7 +129,10 @@ function analyzeField(
   };
 }
 
-function analyzeRelation(relation: RawEntityRelation): AnalyzedRelation | null {
+function analyzeRelation(
+  relation: RawEntityRelation,
+  isSystem: SystemEntityLookup,
+): AnalyzedRelation | null {
   const targetName = relation.target_entity?.data?.name;
   if (!targetName || !relation.field_name) return null;
 
@@ -126,7 +143,7 @@ function analyzeRelation(relation: RawEntityRelation): AnalyzedRelation | null {
     type: relType,
     targetEntityKey: toEntityKey(targetName),
     targetEntityPascalName: targetName,
-    suffixes: getMutationSuffixes(relType),
+    suffixes: getMutationSuffixes(relType, isSystem.owner && isSystem.of(targetName)),
   };
 }
 
@@ -135,7 +152,10 @@ function analyzeRelation(relation: RawEntityRelation): AnalyzedRelation | null {
 //   fieldName = target_field_name (the field on THIS entity)
 //   target = entity.data.name (the source entity we're relating to)
 //   type = inverted
-function analyzeReverseRelation(relation: RawEntityRelation): AnalyzedRelation | null {
+function analyzeReverseRelation(
+  relation: RawEntityRelation,
+  isSystem: SystemEntityLookup,
+): AnalyzedRelation | null {
   const sourceName = relation.entity?.data?.name;
   if (!sourceName || !relation.target_field_name) return null;
 
@@ -146,22 +166,42 @@ function analyzeReverseRelation(relation: RawEntityRelation): AnalyzedRelation |
     type: relType,
     targetEntityKey: toEntityKey(sourceName),
     targetEntityPascalName: sourceName,
-    suffixes: getMutationSuffixes(relType),
+    suffixes: getMutationSuffixes(relType, isSystem.owner && isSystem.of(sourceName)),
   };
 }
 
+// Whether the entity owning a relation is a system entity, plus a lookup for
+// the same flag on the relation's other endpoint — both are needed to pick the
+// attach/detach suffix pair.
+interface SystemEntityLookup {
+  owner: boolean;
+  of: (entityName: string) => boolean;
+}
+
 export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
+  const systemByName = new Map(
+    rawEntities.map((e) => [e.name, e.is_system_entity]),
+  );
+  // An unknown target is treated as non-system, which yields the
+  // `_connect`/`_disconnect` pair used everywhere outside the Pylo internals.
+  const isSystemEntity = (name: string) => systemByName.get(name) ?? false;
+
   return rawEntities.map((entity) => {
     const fields = (entity.entity_fields?.data ?? []).map((f) =>
       analyzeField(f, entity.name),
     );
 
+    const isSystem: SystemEntityLookup = {
+      owner: entity.is_system_entity,
+      of: isSystemEntity,
+    };
+
     const forwardRelations = (entity.entity_relations?.data ?? [])
-      .map(analyzeRelation)
+      .map((r) => analyzeRelation(r, isSystem))
       .filter((r): r is AnalyzedRelation => r !== null);
 
     const reverseRelations = (entity.entity_related?.data ?? [])
-      .map(analyzeReverseRelation)
+      .map((r) => analyzeReverseRelation(r, isSystem))
       .filter((r): r is AnalyzedRelation => r !== null);
 
     // Deduplicate by fieldName — forward relations take precedence
