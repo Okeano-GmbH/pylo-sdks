@@ -1,5 +1,137 @@
 # @pylo/node
 
+## 0.3.0
+
+### Minor Changes
+
+- Add aggregates for entities and events
+
+  Pylo can aggregate two stores, and the SDK reached neither well. Entity
+  aggregation (`entityInstanceAggregate` — count/sum/avg/min/max with filtering,
+  breakdowns and sorting) wasn't exposed at all, so it meant hand-writing GraphQL.
+  Event aggregation was reachable only through `events.list({ filter: { aggregate,
+dimensions } })`, which returned grouped rows under `data` from a method called
+  `list`, typed as `Record<string, unknown>`.
+
+  Both now share one idiom:
+
+  ```ts
+  const { rows, total } = await pylo.creditNoteItem.aggregate({
+    metrics: { revenue: { sum: "amount" }, orders: "count" },
+    groupBy: [{ field: "created_at", interval: "1 month" }, "status"],
+    filter: {
+      query: [
+        { condition: { field: "status", operator: "equal", value: "open" } },
+      ],
+      sortby: [{ field: "revenue", order: "desc" }],
+    },
+    limit: 30,
+  });
+
+  total.revenue; // number | null — typed from the keys you wrote
+  rows[0].bucket; // string
+
+  // Same shape against the event store
+  await pylo.events.aggregate({
+    metrics: { hits: "count" },
+    groupBy: [{ interval: "1 day", timezone: "Europe/Berlin" }],
+  });
+  ```
+
+  Metrics are keyed by alias rather than passed as `[{ function, field, alias }]`.
+  The API requires an alias on every metric and requires it to be unique, so
+  keying by it removes a footgun — omitting one is an error both resolvers raise,
+  including for the default alias the event resolver generates itself — and lets
+  the result type be read back off the keys you wrote. `sum`/`avg`/`min`/`max` are
+  restricted to numeric fields, intervals are checked against `<integer> <unit>`,
+  and `sortby` accepts only a metric alias, a breakdown field, or `"bucket"`.
+
+  Also added:
+
+  - `pylo.<entity>.count()` and `pylo.events.count()` for the common case.
+  - `usePyloAggregate` / `usePyloEventAggregate` in `@pylo/nextjs`. Entity
+    aggregates sit under the `["pylo", entity]` query key, so the existing mutation
+    hooks already invalidate them.
+  - System entities (`PyloUser`, `PyloMedia`, …) now surface an aggregate-only
+    client. They have no list/byId/upsert endpoints but are aggregatable, so
+    `pylo.pyloUser.aggregate(...)` works while the rest of the surface stays absent.
+  - Metric values are coerced to numbers. The API returns `count` as a JSON number
+    but `sum`/`avg`/`min`/`max` over a custom entity as strings (Postgres `numeric`
+    through PDO), which would otherwise make `number | null` untrue.
+
+  Two behaviours worth knowing, both upstream:
+
+  - **Grouping by an enum field returns the enum value's UUID**, not the value —
+    reading the same field through `list`/`byId` returns e.g. `"open"`. Breakdown
+    values are therefore typed `string | number | boolean | null` rather than the
+    field's declared type, since promising the enum union would be wrong.
+  - **`integer_id` is not aggregatable on custom entities.** It is a native column
+    while custom field values live in `entity_field_instances`, so a metric over it
+    resolves to `null` with no error. It is excluded from the metric field types
+    for custom entities and kept for system ones, where it does work.
+
+  `events.list` is unchanged.
+
+### Patch Changes
+
+- Type the nested payload of a relation upsert
+
+  Upserting a relation goes through the `<relation><suffix>` keys on a create/update
+  input — `company_set`, `contacts_connect`, and so on. Codegen typed their value as
+  `Record<string, unknown>` (`Record<string, unknown>[]` for hasMany), so the nested
+  object had no autocomplete and no checking: a misspelled field, a field belonging to
+  a different entity, or a wrong scalar type all compiled, and only failed at the API.
+
+  The GraphQL schema already declares these precisely, with one pattern and no
+  exceptions:
+
+  ```graphql
+  hasOne    <rel>_set: <Target>Input
+  hasMany   <rel>_set / _connect / _disconnect: [<Target>Input!]
+  ```
+
+  The payload is the _bare_ `<Target>Input` — a type distinct from
+  `Update<Target>Input` and `Create<Target>Input`. It carries `id` and
+  `__search_value` (so a nested row can be identified) alongside the target's own
+  scalars and relation keys, which makes it recursive: a nested payload can keep
+  upserting further relations down the graph.
+
+  Codegen now emits `<Entity>Input` for every entity and points the relation keys at
+  it, matching the schema exactly. The bare input is emitted for virtual entities too
+  — they have no mutation endpoints of their own, but relations still target them, so
+  the type has to exist.
+
+  Also fixes which suffixes a hasMany relation gets. Codegen assumed
+  `_connect`/`_disconnect` everywhere, but the schema uses `_add`/`_remove` when a
+  relation runs between two Pylo _system_ entities — both endpoints have to be system
+  entities, so `PyloUser.pylo_aros` is `_add`/`_remove` while `PyloUser.comments`
+  (system → business) and `RecyclingCompany.pylo_users` (business → system) stay
+  `_connect`/`_disconnect`. 39 relations were previously generated with keys the API
+  does not accept; all of them are on Pylo platform entities, so schema-defined
+  business entities were unaffected. hasOne relations still expose only `_set`.
+
+  Renames `replace_variables` to `__replace_vars`, which is what the schema declares
+  (alongside the other underscored directive, `__search_value`). The old name was not
+  a field the API accepts, so any upsert setting it was rejected. It is also added to
+  the create inputs, where the schema has it too and codegen previously omitted it.
+  Its typed union of field names is kept — that is a strict subtype of the declared
+  `[String!]`, so it stays wire-compatible while giving autocomplete — and falls back
+  to `string[]` for an entity whose content is all relations. `id` stays in the union
+  on update inputs and is dropped from the create input's, which has no `id` field.
+
+  Verified against a live schema: 190 entities, 2136 relation keys, every emitted key
+  present and identical to the introspected SDL, no dangling references, and a
+  four-level nested upsert (mixing hasOne and hasMany, identifying rows by
+  `__search_value`) type-checks under `--strict`. No schema-defined business entity
+  has a remaining mismatch; the leftovers are all on Pylo platform types (a few extra
+  foreign-key scalars and identifier keys, and 4 relation keys the schema's inputs do
+  not declare).
+
+  Type-level only; no emitted JavaScript or wire-format changes. Existing calls that
+  passed a correct payload keep compiling. Calls that passed a _wrong_ payload now
+  fail at compile time instead of at the API — that is the point of the change, but it
+  can surface pre-existing mistakes in code that previously type-checked.
+
 ## 0.2.2
 
 ### Patch Changes
