@@ -22,6 +22,21 @@ export type {
   PyloEventFieldValue,
   PyloEventPropertyKeysOptions,
   PyloEventFieldValuesOptions,
+  MetricValue,
+  DimensionValue,
+  AggregateInterval,
+  AggregateIntervalUnit,
+  RowKeyOf,
+  AggregateSortKey,
+  AggregateSortInput,
+  AggregateFilterInput,
+  AggregateTotal,
+  AggregateRow,
+  AggregateRows,
+  AggregateResult,
+  EventMetricInput,
+  EventGroupByInput,
+  EventAggregateOptions,
 } from "./shared-types.js";
 
 // SDK type system
@@ -41,12 +56,19 @@ export type {
   ListResult,
   RequestOptions,
   MutationRequestOptions,
+  FieldName,
+  NumericFieldName,
+  AggregateMetricInput,
+  AggregateGroupByInput,
+  AggregateOptions,
 } from "./types.js";
 
 // Query & mutation builders
 export {
   buildListQuery,
   buildByIdQuery,
+  buildEntityAggregateQuery,
+  buildEventAggregateQuery,
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
@@ -67,6 +89,7 @@ export { mergeHeaders } from "@pylo/auth";
 export {
   PyloError,
   createPyloClient,
+  toAggregateResult,
   flagsToHeaders,
   PYLO_DRY_RUN_HEADER,
   PYLO_DO_NOT_TRIGGER_FLOWS_HEADER,
@@ -76,6 +99,8 @@ export type {
   AuthProvider,
   ClientOptions,
   EntityClient,
+  EntityAggregateApi,
+  AggregateOnlyClient,
   IngestEvents,
   EventsClient,
   Me,

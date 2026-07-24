@@ -11,12 +11,22 @@ import {
   type UseMutationOptions,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { buildListQuery, buildByIdQuery, buildMeQuery, mergeHeaders, flagsToHeaders, capitalize } from "@pylo/core";
+import {
+  buildListQuery,
+  buildByIdQuery,
+  buildMeQuery,
+  mergeHeaders,
+  flagsToHeaders,
+  capitalize,
+  toAggregateResult,
+} from "@pylo/core";
 import {
   buildUpsertMutation,
   buildBulkUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
+  buildEntityAggregateQuery,
+  buildEventAggregateQuery,
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
@@ -42,6 +52,13 @@ import type {
   PyloEventFieldValue,
   PyloEventPropertyKeysOptions,
   PyloEventFieldValuesOptions,
+  AggregateMetricInput,
+  AggregateGroupByInput,
+  AggregateOptions,
+  AggregateResult,
+  EventAggregateOptions,
+  EventMetricInput,
+  EventGroupByInput,
 } from "@pylo/core";
 
 interface HooksOptions {
@@ -286,6 +303,97 @@ export function createPyloHooks<S>(options: HooksOptions) {
 
         // Unlike `<entity>ById`, `me` is not wrapped in a `data` envelope.
         return data["me"] as EntityResult<S, "me" & EntityName<S>, Sel>;
+      },
+    });
+  }
+
+  // Aggregate an entity: `metrics` keyed by alias, `groupBy` for breakdowns.
+  // Resolves to `{ rows, total }` with the aliases you wrote typed on both.
+  //
+  // `E` is `EntityName`, not `CallableEntityName` — system entities have no
+  // list/byId endpoints but can still be aggregated.
+  function usePyloAggregate<
+    E extends EntityName<S>,
+    const M extends Record<string, AggregateMetricInput<S, E>>,
+    const G extends readonly AggregateGroupByInput<S, E>[] = [],
+  >(
+    entity: E,
+    queryOptions: AggregateOptions<S, E, M, G> & RequestOptions,
+  ): UseQueryResult<AggregateResult<M, G>> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: [
+        "pylo",
+        entity,
+        "aggregate",
+        {
+          metrics: queryOptions?.metrics,
+          groupBy: queryOptions?.groupBy,
+          filter: queryOptions?.filter,
+          limit: queryOptions?.limit,
+          headers: merged,
+        },
+      ],
+      queryFn: async () => {
+        const { query, variables } = buildEntityAggregateQuery(
+          capitalize(entity as string),
+          queryOptions as unknown as Record<string, unknown>,
+        );
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          { rows: unknown; total: unknown }
+        >;
+
+        const result = data["entityInstanceAggregate"]!;
+        return toAggregateResult(
+          result.rows,
+          result.total,
+          queryOptions,
+        ) as unknown as AggregateResult<M, G>;
+      },
+    });
+  }
+
+  // The event-store counterpart. Same options and the same `{ rows, total }`
+  // result — the endpoint's `data` / `aggregations` envelope is normalized away.
+  function usePyloEventAggregate<
+    const M extends Record<string, EventMetricInput>,
+    const G extends readonly EventGroupByInput[] = [],
+  >(
+    queryOptions: EventAggregateOptions<M, G> & RequestOptions,
+  ): UseQueryResult<AggregateResult<M, G>> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: [
+        "pylo",
+        "events",
+        "aggregate",
+        {
+          metrics: queryOptions?.metrics,
+          groupBy: queryOptions?.groupBy,
+          filter: queryOptions?.filter,
+          limit: queryOptions?.limit,
+          startTime: queryOptions?.startTime,
+          headers: merged,
+        },
+      ],
+      queryFn: async () => {
+        const { query, variables } = buildEventAggregateQuery(
+          queryOptions as unknown as Record<string, unknown>,
+        );
+
+        const data = (await clientFetch(apiPath, query, variables, merged)) as Record<
+          string,
+          { data: unknown; aggregations: unknown }
+        >;
+
+        const result = data["pyloEventList"]!;
+        return toAggregateResult(
+          result.data,
+          result.aggregations,
+          queryOptions,
+        ) as unknown as AggregateResult<M, G>;
       },
     });
   }
@@ -538,6 +646,8 @@ export function createPyloHooks<S>(options: HooksOptions) {
     usePyloInfiniteList,
     usePyloById,
     usePyloMe,
+    usePyloAggregate,
+    usePyloEventAggregate,
     usePyloUpsert,
     usePyloBulkUpsert,
     usePyloDelete,

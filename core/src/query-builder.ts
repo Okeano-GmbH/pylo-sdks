@@ -1,4 +1,6 @@
 import type {
+  AggregateInput,
+  DimensionInput,
   EventListOptions,
   EventListFilterInput,
   PyloEventPropertyKeysOptions,
@@ -327,6 +329,203 @@ export function buildEventFieldValuesQuery(
   pyloEventFieldValues(${argParts.join(", ")}) {
     value
     count
+  }
+}`;
+
+  return { query, variables };
+}
+
+// Aggregates. Both stores take the same SDK-side options — `metrics` keyed by
+// alias, `groupBy` as a list of axes — and the two builders below translate that
+// into whichever shape the endpoint expects. Runtime option types are loose for
+// the same reason as the other builders: type safety is at the SDK layer.
+interface AggregateOptionsInput {
+  metrics?: unknown;
+  groupBy?: unknown;
+  filter?: unknown;
+  limit?: unknown;
+  // Events only.
+  startTime?: unknown;
+}
+
+const AGGREGATE_FUNCTIONS = ["count", "sum", "avg", "min", "max"] as const;
+
+// The event store's native timestamp column, and the only field an event time
+// bucket may use. Entities have no equivalent default — the field is required.
+const EVENT_BUCKET_FIELD = "ts";
+
+// `{ revenue: { sum: "amount" }, orders: "count" }` → the backend's
+// `[{ function, field, alias }]`. Object key order is preserved, which matters:
+// the entity resolver defaults an ungrouped sort to `metrics[0] desc`.
+//
+// The alias is always emitted. Both resolvers reject a metric without one — the
+// events resolver even rejects the default it generates for a fieldless count —
+// so keying by alias removes a footgun rather than just reading better.
+function toAggregateInputs(metrics: unknown): AggregateInput[] {
+  if (!metrics || typeof metrics !== "object") {
+    throw new Error("aggregate() requires a 'metrics' object.");
+  }
+
+  const result: AggregateInput[] = [];
+
+  for (const [alias, metric] of Object.entries(metrics as Record<string, unknown>)) {
+    // Count of rows — the field is omitted SDK-side but required by the schema,
+    // where "*" is the documented stand-in.
+    if (metric === "count") {
+      result.push({ function: "count", field: "*", alias });
+      continue;
+    }
+
+    if (!metric || typeof metric !== "object") {
+      throw new Error(
+        `Metric "${alias}" must be "count" or an object like { sum: "field" }.`,
+      );
+    }
+
+    const entries = Object.entries(metric as Record<string, unknown>);
+    if (entries.length !== 1) {
+      throw new Error(
+        `Metric "${alias}" must set exactly one aggregate function (got ${entries.length}).`,
+      );
+    }
+
+    const [fn, field] = entries[0] as [string, unknown];
+    if (!(AGGREGATE_FUNCTIONS as readonly string[]).includes(fn)) {
+      throw new Error(
+        `Metric "${alias}" has unknown aggregate function "${fn}". Expected one of: ${AGGREGATE_FUNCTIONS.join(", ")}.`,
+      );
+    }
+    if (typeof field !== "string" || field.length === 0) {
+      throw new Error(`Metric "${alias}" (${fn}) requires a field name.`);
+    }
+
+    result.push({ function: fn as AggregateInput["function"], field, alias });
+  }
+
+  if (result.length === 0) {
+    throw new Error("aggregate() requires at least one metric.");
+  }
+
+  return result;
+}
+
+// `["status", { field: "created_at", interval: "1 day" }]` → `DimensionInput[]`.
+// A string is a plain group-by; an object is a time bucket. `defaultBucketField`
+// covers events, where the bucket field is always the native `ts` column.
+function toDimensionInputs(groupBy: unknown, defaultBucketField?: string): DimensionInput[] {
+  if (!Array.isArray(groupBy)) {
+    throw new Error("'groupBy' must be an array of field names and/or time buckets.");
+  }
+
+  return groupBy.map((axis, index) => {
+    if (typeof axis === "string") {
+      if (axis.length === 0) {
+        throw new Error(`groupBy[${index}] must be a non-empty field name.`);
+      }
+      return { field: axis };
+    }
+
+    if (axis && typeof axis === "object" && "interval" in axis) {
+      const bucket = axis as { field?: string; interval: string; timezone?: string };
+      const field = bucket.field ?? defaultBucketField;
+      if (field === undefined) {
+        throw new Error(`groupBy[${index}] time bucket requires a 'field'.`);
+      }
+      return {
+        timeBucket: {
+          field,
+          interval: bucket.interval,
+          ...(bucket.timezone !== undefined ? { timezone: bucket.timezone } : {}),
+        },
+      };
+    }
+
+    throw new Error(
+      `groupBy[${index}] must be a field name or a time bucket ({ interval: "1 day", … }).`,
+    );
+  });
+}
+
+// `filter` carries the pre-aggregation row filter (`query`) and the ordering of
+// the returned groups (`sortby`), both passed through untouched.
+function applyAggregateFilter(
+  filter: Record<string, unknown>,
+  options: AggregateOptionsInput,
+): void {
+  const source = options.filter as { query?: unknown; sortby?: unknown } | undefined;
+  if (source?.query !== undefined) {
+    filter["query"] = source.query;
+  }
+  if (source?.sortby !== undefined) {
+    filter["sortby"] = source.sortby;
+  }
+  if (options.limit !== undefined) {
+    filter["limit"] = options.limit;
+  }
+}
+
+export function buildEntityAggregateQuery(
+  entityName: string,
+  options: AggregateOptionsInput,
+): BuildResult {
+  const filter: Record<string, unknown> = {
+    aggregate: toAggregateInputs(options.metrics),
+  };
+
+  if (Array.isArray(options.groupBy) && options.groupBy.length > 0) {
+    filter["dimensions"] = toDimensionInputs(options.groupBy);
+  }
+  applyAggregateFilter(filter, options);
+
+  const query = `query ${entityName}Aggregate($entityName: String!, $filter: EntityInstanceAggregateInput!) {
+  entityInstanceAggregate(entityName: $entityName, filter: $filter) {
+    rows
+    total
+  }
+}`;
+
+  return { query, variables: { entityName, filter } };
+}
+
+// Events aggregate through `pyloEventList` rather than a dedicated endpoint, so
+// the grouped rows arrive as `data` and the grand total as `aggregations`; the
+// client renames both to match the entity surface.
+export function buildEventAggregateQuery(options: AggregateOptionsInput): BuildResult {
+  const filter: Record<string, unknown> = {
+    aggregate: toAggregateInputs(options.metrics),
+  };
+
+  const grouped = Array.isArray(options.groupBy) && options.groupBy.length > 0;
+  if (grouped) {
+    filter["dimensions"] = toDimensionInputs(options.groupBy, EVENT_BUCKET_FIELD);
+  }
+  applyAggregateFilter(filter, options);
+
+  const variables: Record<string, unknown> = { filter };
+  const varDecls = ["$filter: EventListFilterInput"];
+  const argParts = ["filter: $filter"];
+
+  if (options.startTime !== undefined) {
+    variables["startTime"] = options.startTime;
+    varDecls.push("$startTime: String");
+    argParts.push("startTime: $startTime");
+  }
+
+  // Without a breakdown the query stays in list mode, where the resolver runs a
+  // paged data query *alongside* the aggregation. Nothing reads those rows, so
+  // shrink them to one narrow record instead of pulling a default-sized page out
+  // of a table that runs to tens of millions of events.
+  if (!grouped) {
+    variables["pagination"] = { page: 1, per_page: 1 };
+    variables["select_fields"] = [EVENT_BUCKET_FIELD];
+    varDecls.push("$pagination: PaginationInput", "$select_fields: [String!]");
+    argParts.push("pagination: $pagination", "select_fields: $select_fields");
+  }
+
+  const query = `query PyloEventAggregate(${varDecls.join(", ")}) {
+  pyloEventList(${argParts.join(", ")}) {
+    data
+    aggregations
   }
 }`;
 

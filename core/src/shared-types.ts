@@ -186,3 +186,129 @@ export interface PyloEventFieldValuesOptions {
   startTime?: string;
   limit?: number;
 }
+
+//
+// Aggregates
+//
+// Pylo aggregates two stores — entities via `entityInstanceAggregate` and events
+// via `pyloEventList` — and the SDK reaches both through one idiom:
+//
+//   metrics: { revenue: { sum: "amount" }, orders: "count" }
+//   groupBy: [{ field: "created_at", interval: "1 month" }, "status"]
+//
+// `metrics` is keyed by alias because the backend *requires* an alias on every
+// metric (both resolvers reject a missing one, despite the schema marking it
+// optional) and requires it to be a unique identifier. Keying by it makes
+// duplicates impossible and lets the result type be read back off `keyof`.
+//
+// The builders translate this to the backend's `AggregateInput[]` /
+// `DimensionInput[]` arrays. The types below are the parts that don't depend on
+// a generated schema; `types.ts` adds the entity-specific field constraints.
+
+// A metric value as it reaches the caller. The API is inconsistent about the
+// wire type — `count` arrives as a JSON number, but `sum`/`avg`/`min`/`max` over
+// a custom entity arrive as strings (Postgres `numeric` through PDO, e.g.
+// "10.815217391304348"). The client coerces both to `number`, so this type holds
+// after that step. `null` is a genuine result: an aggregate over zero rows.
+export type MetricValue = number | null;
+
+// A breakdown value. Deliberately *not* the field's declared type: grouping by
+// an enum field returns the enum value's UUID rather than the value itself
+// (reading the same field through `list`/`byId` returns e.g. "open"), so
+// promising the enum union here would be wrong. Time buckets are ISO 8601.
+export type DimensionValue = string | number | boolean | null;
+
+export type AggregateIntervalUnit =
+  | "second"
+  | "minute"
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "quarter"
+  | "year";
+
+// Bucket stride: `<integer> <unit>`, plural tolerated. The backend additionally
+// requires a multiplier of 1 for `month`/`quarter`/`year` (calendar units aren't
+// fixed-stride) — not expressible here, so it stays a runtime error.
+export type AggregateInterval =
+  | `${number} ${AggregateIntervalUnit}`
+  | `${number} ${AggregateIntervalUnit}s`;
+
+// The row key a breakdown axis contributes: a plain string axis keys the row by
+// that field/path verbatim, a time bucket is always keyed `bucket`.
+export type RowKeyOf<G> = G extends string
+  ? G
+  : G extends { interval: unknown }
+    ? "bucket"
+    : never;
+
+// Keys a result sort may reference: a metric alias or a breakdown key. Matches
+// what both resolvers validate against.
+export type AggregateSortKey<M, G extends readonly unknown[]> =
+  | (keyof M & string)
+  | RowKeyOf<G[number]>;
+
+export interface AggregateSortInput<M, G extends readonly unknown[]> {
+  field: AggregateSortKey<M, G>;
+  order: SortOrder;
+}
+
+// Narrows the rows *before* aggregation. Same `QueryInput` tree as list queries;
+// `sortby` orders the returned groups.
+export interface AggregateFilterInput<M, G extends readonly unknown[]> {
+  query?: QueryInput[];
+  sortby?: Array<AggregateSortInput<M, G>>;
+}
+
+// Grand total over the full filtered set, ignoring any breakdown.
+//
+// `-readonly` strips the modifier that `const` type parameters put on the
+// inferred `metrics` literal: the options object is read-only, the result the
+// caller gets back is not.
+export type AggregateTotal<M> = { -readonly [A in keyof M]: MetricValue };
+
+export type AggregateRow<M, G extends readonly unknown[]> = AggregateTotal<M> & {
+  [K in RowKeyOf<G[number]>]: K extends "bucket" ? string : DimensionValue;
+};
+
+// Without a breakdown the backend returns no rows at all, so the type collapses
+// to the empty tuple — indexing it is then a compile error that points the
+// caller at `total` instead of handing them a silently empty array.
+export type AggregateRows<M, G extends readonly unknown[]> = G extends readonly []
+  ? []
+  : Array<AggregateRow<M, G>>;
+
+export interface AggregateResult<M, G extends readonly unknown[]> {
+  rows: AggregateRows<M, G>;
+  total: AggregateTotal<M>;
+}
+
+// Events are schemaless, so metric fields are plain strings: a top-level column
+// (`event_name`, `ts`, `source`) or a dotted property path (`order.total`).
+export type EventMetricInput =
+  | "count"
+  | { count: string }
+  | { sum: string }
+  | { avg: string }
+  | { min: string }
+  | { max: string };
+
+// A plain string groups by that column/property path; an object is a time
+// bucket, whose `field` defaults to the native `ts` column.
+export type EventGroupByInput =
+  | string
+  | { field?: string; interval: AggregateInterval; timezone?: string };
+
+export interface EventAggregateOptions<
+  M extends Record<string, EventMetricInput>,
+  G extends readonly EventGroupByInput[],
+> {
+  metrics: M;
+  groupBy?: G;
+  filter?: AggregateFilterInput<M, G>;
+  // Cap on returned grouped rows (after sort). No effect on `total`.
+  limit?: number;
+  // ISO-8601 lower bound on `ts` — a convenience for the common time filter.
+  startTime?: string;
+}

@@ -8,6 +8,8 @@ import {
 import {
   buildListQuery,
   buildByIdQuery,
+  buildEntityAggregateQuery,
+  buildEventAggregateQuery,
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
@@ -21,6 +23,11 @@ import {
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
 import type {
+  AggregateResult,
+  EventAggregateOptions,
+  EventGroupByInput,
+  EventMetricInput,
+  MetricValue,
   PaginationData,
   PyloEvent,
   PyloEventInput,
@@ -30,8 +37,12 @@ import type {
   PyloEventFieldValue,
   PyloEventPropertyKeysOptions,
   PyloEventFieldValuesOptions,
+  QueryInput,
 } from "./shared-types.js";
 import type {
+  AggregateGroupByInput,
+  AggregateMetricInput,
+  AggregateOptions,
   EntityName,
   EntityResult,
   ListOptions,
@@ -42,6 +53,7 @@ import type {
   UpsertInput,
   RequestOptions,
   MutationRequestOptions,
+  VirtualEntityName,
 } from "./types.js";
 
 export const PYLO_DRY_RUN_HEADER = "pylo-dry-run";
@@ -76,7 +88,29 @@ export interface ClientOptions {
   headers?: Record<string, string>;
 }
 
-export interface EntityClient<S, E extends EntityName<S>> {
+// Aggregation over an entity. Split out from `EntityClient` because system
+// entities support it while supporting nothing else — see `AggregateOnlyClient`.
+export interface EntityAggregateApi<S, E extends EntityName<S>> {
+  // Metrics are keyed by alias (`{ revenue: { sum: "amount" } }`) and read back
+  // by the same keys: `total.revenue`. `groupBy` adds breakdown rows; without it
+  // the backend returns none, and `rows` types as the empty tuple.
+  aggregate<
+    const M extends Record<string, AggregateMetricInput<S, E>>,
+    const G extends readonly AggregateGroupByInput<S, E>[] = [],
+  >(
+    options: AggregateOptions<S, E, M, G> & RequestOptions,
+  ): Promise<AggregateResult<M, G>>;
+
+  // How many rows match — the common case of the above, without the ceremony.
+  count(options?: { query?: QueryInput[] } & RequestOptions): Promise<number>;
+}
+
+// What a system ("virtual") entity exposes. It has no list/byId/upsert/delete
+// endpoints, but the aggregate resolver reads it happily — its fields live in
+// native columns rather than `entity_field_instances`.
+export type AggregateOnlyClient<S, E extends EntityName<S>> = EntityAggregateApi<S, E>;
+
+export interface EntityClient<S, E extends EntityName<S>> extends EntityAggregateApi<S, E> {
   list<Sel extends SelectConstraint<S, E, Sel>>(
     options: ListOptions<S, E, Sel> & RequestOptions,
   ): Promise<ListResult<EntityResult<S, E, Sel>>>;
@@ -116,6 +150,25 @@ export interface EventsClient {
   // are set — grouped/analytics rows plus grand-total `aggregations`.
   list(options?: EventListOptions & RequestOptions): Promise<PyloEventListResult>;
 
+  // Aggregate the event store. Identical in shape to `<entity>.aggregate`, and
+  // returns the same `{ rows, total }` — the underlying endpoint's `data` /
+  // `aggregations` envelope is normalized away. Fields are top-level columns or
+  // dotted property paths; there is no schema to check them against.
+  aggregate<
+    const M extends Record<string, EventMetricInput>,
+    const G extends readonly EventGroupByInput[] = [],
+  >(
+    options: EventAggregateOptions<M, G> & RequestOptions,
+  ): Promise<AggregateResult<M, G>>;
+
+  // How many events match.
+  count(
+    options?: {
+      filter?: { query?: QueryInput[] };
+      startTime?: string;
+    } & RequestOptions,
+  ): Promise<number>;
+
   // Infer the property paths (and JSON types) present across recent events.
   propertyKeys(
     options?: PyloEventPropertyKeysOptions & RequestOptions,
@@ -139,8 +192,17 @@ export type Me<S> = "me" extends EntityName<S>
     ) => Promise<EntityResult<S, "me" & EntityName<S>, Sel>>
   : never;
 
+// Keys the client reserves for itself. They shadow any entity of the same name,
+// so they must also be kept out of the virtual-entity mapping below.
+type ReservedClientKey = "ingestEvents" | "events" | "me";
+
 export type PyloClient<S> = {
   [E in CallableEntityName<S>]: EntityClient<S, E>;
+} & {
+  // System entities expose no list/byId/upsert/delete endpoints, but they *can*
+  // be aggregated — `pylo.pyloUser.aggregate(…)` counts users. They surface with
+  // that one method rather than staying unreachable.
+  [E in Exclude<VirtualEntityName<S>, ReservedClientKey>]: AggregateOnlyClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
   events: EventsClient;
@@ -176,6 +238,116 @@ async function executeGraphQL<T>(
   }
 
   return response.data;
+}
+
+// The API is inconsistent about how it types metric values on the wire: `count`
+// arrives as a JSON number, but `sum`/`avg`/`min`/`max` over a *custom* entity
+// arrive as strings, because Postgres returns `numeric` as a string through PDO
+// (e.g. "10.815217391304348"). System entities, whose fields are native columns,
+// return numbers throughout. Callers shouldn't have to know which case they are
+// in, so metric values are coerced here.
+function coerceMetricValue(value: unknown): MetricValue {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isNaN(value) ? null : value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+// Coerce only the keys we know are metrics — the aliases just sent — so
+// breakdown values pass through exactly as received. That matters: a group key
+// can legitimately be a numeric-looking string and must not be rewritten.
+//
+// Every requested alias is materialized, including ones the payload omits (the
+// endpoint returns a null `aggregations` when it computed nothing). The result
+// type promises a key per metric, so leaving one out would make that a lie.
+function coerceMetrics(
+  row: Record<string, unknown>,
+  aliases: string[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...row };
+  for (const alias of aliases) {
+    result[alias] = coerceMetricValue(result[alias]);
+  }
+  return result;
+}
+
+function metricAliases(options: { metrics?: unknown }): string[] {
+  const metrics = options.metrics;
+  if (!metrics || typeof metrics !== "object") return [];
+  return Object.keys(metrics as Record<string, unknown>);
+}
+
+/**
+ * Normalize an aggregate payload into the `{ rows, total }` both surfaces
+ * return, coercing metric values to numbers. Exported because the React hooks
+ * talk to the API route directly rather than through the client, and must not
+ * re-implement the coercion.
+ *
+ * Entity payloads supply `rows` / `total`; event payloads supply `data` /
+ * `aggregations` (pass them in that order).
+ */
+export function toAggregateResult(
+  rows: unknown,
+  total: unknown,
+  options: { metrics?: unknown },
+): { rows: unknown[]; total: Record<string, unknown> } {
+  const aliases = metricAliases(options);
+  return {
+    rows: Array.isArray(rows)
+      ? rows.map((row) => coerceMetrics((row ?? {}) as Record<string, unknown>, aliases))
+      : [],
+    total: coerceMetrics((total ?? {}) as Record<string, unknown>, aliases),
+  };
+}
+
+async function runEntityAggregate(
+  entityKey: string,
+  endpoint: string,
+  auth: AuthProvider,
+  options: { metrics?: unknown } & RequestOptions,
+  globalHeaders?: Record<string, string>,
+): Promise<{ rows: unknown[]; total: Record<string, unknown> }> {
+  const { query, variables } = buildEntityAggregateQuery(
+    capitalize(entityKey),
+    options as Record<string, unknown>,
+  );
+
+  const data = await executeGraphQL<
+    Record<string, { rows: unknown; total: unknown } | null>
+  >(endpoint, query, variables, auth, mergeHeaders(globalHeaders, options?.headers));
+
+  const result = data["entityInstanceAggregate"];
+  if (!result) {
+    throw new PyloError("Unexpected response shape — missing entityInstanceAggregate");
+  }
+
+  return toAggregateResult(result.rows, result.total, options);
+}
+
+async function runEventAggregate(
+  endpoint: string,
+  auth: AuthProvider,
+  options: { metrics?: unknown } & RequestOptions,
+  globalHeaders?: Record<string, string>,
+): Promise<{ rows: unknown[]; total: Record<string, unknown> }> {
+  const { query, variables } = buildEventAggregateQuery(options as Record<string, unknown>);
+
+  const data = await executeGraphQL<
+    Record<string, { data: unknown; aggregations: unknown } | null>
+  >(endpoint, query, variables, auth, mergeHeaders(globalHeaders, options?.headers));
+
+  const result = data["pyloEventList"];
+  if (!result) {
+    throw new PyloError("Unexpected response shape — missing pyloEventList");
+  }
+
+  // `pyloEventList` names the grouped rows `data` and the grand total
+  // `aggregations`; rename both so the two aggregate surfaces are identical to
+  // callers. `aggregations` is null when the query ran without metrics.
+  return toAggregateResult(result.data, result.aggregations, options);
 }
 
 function createEntityClient<S, E extends EntityName<S>>(
@@ -229,6 +401,34 @@ function createEntityClient<S, E extends EntityName<S>>(
       if (!result) return null as never;
 
       return result.data as never;
+    },
+
+    async aggregate(options) {
+      const result = await runEntityAggregate(
+        entityKey,
+        endpoint,
+        auth,
+        options as { metrics?: unknown } & RequestOptions,
+        globalHeaders,
+      );
+
+      return result as never;
+    },
+
+    async count(options) {
+      const { total } = await runEntityAggregate(
+        entityKey,
+        endpoint,
+        auth,
+        {
+          metrics: { count: "count" },
+          ...(options?.query !== undefined ? { filter: { query: options.query } } : {}),
+          ...(options?.headers !== undefined ? { headers: options.headers } : {}),
+        },
+        globalHeaders,
+      );
+
+      return (total["count"] as number | null) ?? 0;
     },
 
     async upsert(input, options) {
@@ -371,6 +571,33 @@ function createEventsClient(
       }
 
       return result;
+    },
+
+    async aggregate(options) {
+      const result = await runEventAggregate(
+        endpoint,
+        auth,
+        options as { metrics?: unknown } & RequestOptions,
+        globalHeaders,
+      );
+
+      return result as never;
+    },
+
+    async count(options) {
+      const { total } = await runEventAggregate(
+        endpoint,
+        auth,
+        {
+          metrics: { count: "count" },
+          ...(options?.filter !== undefined ? { filter: options.filter } : {}),
+          ...(options?.startTime !== undefined ? { startTime: options.startTime } : {}),
+          ...(options?.headers !== undefined ? { headers: options.headers } : {}),
+        },
+        globalHeaders,
+      );
+
+      return (total["count"] as number | null) ?? 0;
     },
 
     async propertyKeys(options) {

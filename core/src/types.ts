@@ -1,6 +1,8 @@
 // Core type system — conditional types that power the SDK's type safety.
 
 import type {
+  AggregateFilterInput,
+  AggregateInterval,
   FilterInput,
   PaginationData,
   PaginationInput,
@@ -213,6 +215,75 @@ export interface ListResult<T> {
 // Transport-level options for individual operations
 export interface RequestOptions {
   headers?: Record<string, string>;
+}
+
+//
+// Aggregates — the entity-specific half
+//
+// The schema-free shapes (metrics-by-alias, `groupBy`, the result types) live in
+// `shared-types.ts` and are used by both stores. What differs for entities is
+// that a generated `PyloSchema` is available, so field names and the numeric
+// guard can be checked at compile time instead of round-tripping to a 400.
+
+// Fields addressable by name on an entity.
+export type FieldName<S, E extends EntityName<S>> = keyof EntityFields<S, E> & string;
+
+// Fields `sum`/`avg`/`min`/`max` accept — the backend rejects anything
+// non-numeric ("Cannot apply `sum` to non-numeric field `comment` … (type: text)").
+//
+// `integer_id` is excluded on custom entities: it is a native column on
+// `entity_instances`, but a custom entity's field values are read out of
+// `entity_field_instances`, so a metric over it resolves to NULL — silently, with
+// no error. System entities keep every field in native columns, so there it is a
+// real metric and stays offered.
+export type NumericFieldName<S, E extends EntityName<S>> = Exclude<
+  {
+    [K in keyof EntityFields<S, E>]: NonNullable<EntityFields<S, E>[K]> extends number
+      ? K
+      : never;
+  }[keyof EntityFields<S, E>] &
+    string,
+  E extends VirtualEntityName<S> ? never : "integer_id"
+>;
+
+// One metric. `"count"` is shorthand for counting rows; `{ count: field }` counts
+// that field's distinct values.
+export type AggregateMetricInput<S, E extends EntityName<S>> =
+  | "count"
+  | { count: FieldName<S, E> | "*" }
+  | { sum: NumericFieldName<S, E> }
+  | { avg: NumericFieldName<S, E> }
+  | { min: NumericFieldName<S, E> }
+  | { max: NumericFieldName<S, E> };
+
+// One breakdown axis. A plain string groups by that field — dotted relation
+// paths ("device_type.name", multi-hop) are supported by the backend but can't be
+// enumerated from the schema, so `string & {}` keeps them legal without losing
+// autocomplete on direct fields. An object is a time bucket.
+//
+// `timeBucket.field` can't be narrowed to datetime fields: codegen maps
+// DATE/DATETIME/TIME to `string`, indistinguishable from TEXT. The backend
+// validates it and errors clearly.
+export type AggregateGroupByInput<S, E extends EntityName<S>> =
+  | FieldName<S, E>
+  | (string & {})
+  | {
+      field: FieldName<S, E> | (string & {});
+      interval: AggregateInterval;
+      timezone?: string;
+    };
+
+export interface AggregateOptions<
+  S,
+  E extends EntityName<S>,
+  M extends Record<string, AggregateMetricInput<S, E>>,
+  G extends readonly AggregateGroupByInput<S, E>[],
+> {
+  metrics: M;
+  groupBy?: G;
+  filter?: AggregateFilterInput<M, G>;
+  // Cap on returned grouped rows (after sort). No effect on `total`.
+  limit?: number;
 }
 
 // Mutation-only transport options. Mutations accept the same `headers` as
