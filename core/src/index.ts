@@ -82,6 +82,29 @@ export {
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
 
+// File upload
+export {
+  CREATE_UPLOAD_MUTATION,
+  CREATE_DOWNLOAD_MUTATION,
+  toUploadPart,
+  uploadToUrl,
+  splitEntityRelationPath,
+  normalizeEntityRelationPath,
+  buildCreateUploadInput,
+  buildAttachMutation,
+} from "./upload.js";
+export type {
+  UploadUrl,
+  UploadProgress,
+  UploadSource,
+  UploadOptions,
+  CreateUploadUrlOptions,
+  CreateUploadInput,
+  UploadAttachTarget,
+  PyloUploadedFile,
+  EntityRelationPath,
+} from "./upload.js";
+
 // Header utilities
 export { mergeHeaders } from "@pylo/auth";
 
@@ -104,6 +127,7 @@ export type {
   IngestEvents,
   EventsClient,
   Me,
+  FilesClient,
   PyloClient,
 } from "./client.js";
 

@@ -22,6 +22,22 @@ import {
   buildDeleteMutation,
   buildIngestEventsMutation,
 } from "./mutation-builder.js";
+import {
+  CREATE_UPLOAD_MUTATION,
+  CREATE_DOWNLOAD_MUTATION,
+  buildCreateUploadInput,
+  buildAttachMutation,
+  toUploadPart,
+  uploadToUrl,
+} from "./upload.js";
+import type {
+  UploadUrl,
+  UploadSource,
+  UploadOptions,
+  CreateUploadUrlOptions,
+  CreateUploadInput,
+  PyloUploadedFile,
+} from "./upload.js";
 import type {
   AggregateResult,
   EventAggregateOptions,
@@ -194,7 +210,32 @@ export type Me<S> = "me" extends EntityName<S>
 
 // Keys the client reserves for itself. They shadow any entity of the same name,
 // so they must also be kept out of the virtual-entity mapping below.
-type ReservedClientKey = "ingestEvents" | "events" | "me";
+type ReservedClientKey = "ingestEvents" | "events" | "me" | "files";
+
+// File upload/download. Pylo uploads are a two-step uploadUrl flow: `createUpload`
+// returns `{ id, url }` (id = the future pyloMedia id, url = an expiring Pylo
+// fileservice endpoint), then the bytes are POSTed to that url — see
+// `./upload.ts`. Exposed as `client.files`, a reserved key that shadows any
+// entity of the same name.
+export interface FilesClient<S> {
+  // Uploads a file and returns the new pyloMedia row's id. Pass
+  // `entityRelationPath` to enforce the relation's mime/extension allowlists,
+  // and `attachTo` to connect the file to a record in the same call.
+  upload(
+    source: UploadSource,
+    options?: UploadOptions<S> & RequestOptions,
+  ): Promise<PyloUploadedFile>;
+
+  // Lower-level escape hatch: requests the upload URL without sending bytes
+  // (e.g. to hand it to another process). It expires (~1h).
+  createUploadUrl(
+    options?: CreateUploadUrlOptions<S> & RequestOptions,
+  ): Promise<UploadUrl>;
+
+  // Creates a fresh download URL for a pyloMedia id. Private-file URLs expire
+  // quickly (default ~5 minutes) — don't cache them.
+  getDownloadUrl(id: string, options?: RequestOptions): Promise<string>;
+}
 
 export type PyloClient<S> = {
   [E in CallableEntityName<S>]: EntityClient<S, E>;
@@ -207,6 +248,7 @@ export type PyloClient<S> = {
   ingestEvents: IngestEvents;
   events: EventsClient;
   me: Me<S>;
+  files: FilesClient<S>;
 };
 
 function getEndpoint(endpoint?: string): string {
@@ -660,6 +702,87 @@ function createMe<S>(
   return me as Me<S>;
 }
 
+function createFilesClient<S>(
+  endpoint: string,
+  auth: AuthProvider,
+  globalHeaders?: Record<string, string>,
+): FilesClient<S> {
+  async function requestUploadUrl(
+    input: CreateUploadInput | null,
+    options?: RequestOptions,
+  ): Promise<UploadUrl> {
+    const data = await executeGraphQL<{ createUpload: UploadUrl }>(
+      endpoint,
+      CREATE_UPLOAD_MUTATION,
+      { input },
+      auth,
+      mergeHeaders(globalHeaders, options?.headers),
+    );
+
+    const result = data.createUpload;
+    if (!result) {
+      throw new PyloError("Unexpected response shape — missing createUpload");
+    }
+    return result;
+  }
+
+  return {
+    // `async` so a bad option combination surfaces as a rejection rather than
+    // a synchronous throw from a Promise-returning method.
+    async createUploadUrl(options?: CreateUploadUrlOptions<S> & RequestOptions) {
+      return requestUploadUrl(buildCreateUploadInput(options), options);
+    },
+
+    async upload(source, options) {
+      // Validate before touching the bytes so bad option combinations fail
+      // without creating a pyloMedia row.
+      const input = buildCreateUploadInput(options);
+      const part = toUploadPart(source, options);
+      const uploadUrl = await requestUploadUrl(input, options);
+
+      await uploadToUrl(uploadUrl.url, part.blob, part.fileName, options ?? {});
+
+      if (options?.attachTo) {
+        const { query, variables } = buildAttachMutation(
+          options.entityRelationPath as string,
+          uploadUrl.id,
+          options.attachTo,
+        );
+        await executeGraphQL(
+          endpoint,
+          query,
+          variables,
+          auth,
+          mergeHeaders(globalHeaders, options.headers),
+        );
+      }
+
+      return {
+        id: uploadUrl.id,
+        fileName: part.fileName,
+        mimeType: part.mimeType,
+        size: part.blob.size,
+      };
+    },
+
+    async getDownloadUrl(id, options) {
+      const data = await executeGraphQL<{ createDownload: { id: string; url: string } }>(
+        endpoint,
+        CREATE_DOWNLOAD_MUTATION,
+        { id },
+        auth,
+        mergeHeaders(globalHeaders, options?.headers),
+      );
+
+      const result = data.createDownload;
+      if (!result) {
+        throw new PyloError("Unexpected response shape — missing createDownload");
+      }
+      return result.url;
+    },
+  };
+}
+
 export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const endpoint = getEndpoint(options.endpoint);
   const auth = options.auth;
@@ -668,6 +791,7 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const ingestEvents = createIngestEvents(endpoint, auth, globalHeaders);
   const events = createEventsClient(endpoint, auth, globalHeaders);
   const me = createMe<S>(endpoint, auth, globalHeaders);
+  const files = createFilesClient<S>(endpoint, auth, globalHeaders);
 
   return new Proxy({} as PyloClient<S>, {
     get(_target, prop) {
@@ -675,6 +799,7 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
       if (prop === "ingestEvents") return ingestEvents;
       if (prop === "events") return events;
       if (prop === "me") return me;
+      if (prop === "files") return files;
       return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, globalHeaders);
     },
   });

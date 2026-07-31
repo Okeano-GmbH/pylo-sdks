@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef, useState } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -30,6 +31,20 @@ import {
   buildEventListQuery,
   buildEventPropertyKeysQuery,
   buildEventFieldValuesQuery,
+} from "@pylo/core";
+import {
+  CREATE_UPLOAD_MUTATION,
+  CREATE_DOWNLOAD_MUTATION,
+  buildCreateUploadInput,
+  buildAttachMutation,
+  uploadToUrl,
+} from "@pylo/core";
+import type {
+  UploadUrl,
+  UploadProgress,
+  UploadAttachTarget,
+  PyloUploadedFile,
+  EntityRelationPath,
 } from "@pylo/core";
 import type {
   PaginationData,
@@ -83,6 +98,46 @@ type InfiniteListOptions<S, E extends CallableEntityName<S>, Sel extends EntityS
 interface PageData {
   data: unknown[];
   pagination: PaginationData;
+}
+
+interface UploadHookOptions<S> {
+  /**
+   * The pyloMedia relation the files are destined for, e.g. `"contact.avatar"`.
+   * The relation's mime-type/extension allowlists are enforced on upload.
+   * Omit to upload unrestricted, unattached media.
+   */
+  entityRelationPath?: EntityRelationPath<S>;
+  /** Create persistent public download URLs (no JWT). Requires `entityRelationPath`. */
+  isPublic?: boolean;
+  onProgress?: (progress: UploadProgress) => void;
+  onSuccess?: (files: PyloUploadedFile[]) => void;
+  onError?: (error: Error) => void;
+  headers?: Record<string, string>;
+}
+
+interface StartUploadOptions<S> {
+  entityRelationPath?: EntityRelationPath<S>;
+  isPublic?: boolean;
+  /** Attach the uploaded file(s) to this record via the `entityRelationPath` relation. */
+  attachTo?: UploadAttachTarget;
+}
+
+interface UploadHookResult<S> {
+  /** Uploads one or more files; resolves with the created pyloMedia rows. */
+  startUpload: (
+    files: File | File[],
+    overrides?: StartUploadOptions<S>,
+  ) => Promise<PyloUploadedFile[]>;
+  isUploading: boolean;
+  /** 0–100, aggregated by bytes across all files of the current batch. */
+  progress: number;
+  error: Error | null;
+  /** Results of the last successful batch. */
+  uploadedFiles: PyloUploadedFile[];
+  /** Cancels the in-flight batch. */
+  abort: () => void;
+  /** Clears progress, error, and results. */
+  reset: () => void;
 }
 
 async function clientFetch(
@@ -641,6 +696,161 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
+  // Uploads files through the Pylo two-step flow: requests an upload URL via
+  // the API route (`createUpload`), then POSTs the bytes straight
+  // from the browser to the returned fileservice URL (the expiring JWT in the
+  // URL is the credential, so no bytes pass through the app server). Progress
+  // is byte-accurate via XMLHttpRequest.
+  function usePyloUpload(hookOptions?: UploadHookOptions<S>): UploadHookResult<S> {
+    const queryClient = useQueryClient();
+    const [isUploading, setIsUploading] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [error, setError] = useState<Error | null>(null);
+    const [uploadedFiles, setUploadedFiles] = useState<PyloUploadedFile[]>([]);
+    const abortRef = useRef<AbortController | null>(null);
+
+    // Latest options without re-creating startUpload on every render.
+    const optionsRef = useRef(hookOptions);
+    optionsRef.current = hookOptions;
+
+    const startUpload = useCallback(
+      async (
+        files: File | File[],
+        overrides?: StartUploadOptions<S>,
+      ): Promise<PyloUploadedFile[]> => {
+        const opts = { ...optionsRef.current, ...overrides };
+        const merged = mergeHeaders(globalHeaders, opts.headers);
+        const list = Array.isArray(files) ? files : [files];
+        if (list.length === 0) return [];
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setIsUploading(true);
+        setProgress(0);
+        setError(null);
+        setUploadedFiles([]);
+
+        const grandTotal = list.reduce((sum, file) => sum + file.size, 0);
+        const loadedPerFile: number[] = new Array<number>(list.length).fill(0);
+        const reportProgress = () => {
+          const loaded = loadedPerFile.reduce((sum, bytes) => sum + bytes, 0);
+          const percent =
+            grandTotal > 0 ? Math.round((loaded / grandTotal) * 100) : 0;
+          setProgress(percent);
+          optionsRef.current?.onProgress?.({ loaded, total: grandTotal, percent });
+        };
+
+        try {
+          // Same pre-flight the server client runs — also rejects a multi-file
+          // batch aimed at a `"set"` relation before any bytes are sent.
+          const input = buildCreateUploadInput(opts, list.length);
+
+          const results = await Promise.all(
+            list.map(async (file, index) => {
+              const data = (await clientFetch(
+                apiPath,
+                CREATE_UPLOAD_MUTATION,
+                { input },
+                merged,
+              )) as { createUpload: UploadUrl };
+              const uploadUrl = data.createUpload;
+
+              await uploadToUrl(uploadUrl.url, file, file.name, {
+                signal: controller.signal,
+                onProgress: (fileProgress) => {
+                  loadedPerFile[index] = fileProgress.loaded;
+                  reportProgress();
+                },
+              });
+              loadedPerFile[index] = file.size;
+              reportProgress();
+
+              return {
+                id: uploadUrl.id,
+                fileName: file.name,
+                mimeType: file.type || undefined,
+                size: file.size,
+              } satisfies PyloUploadedFile;
+            }),
+          );
+
+          // One attach mutation for the whole batch — per-file upserts against
+          // the same record would race and overwrite each other.
+          if (opts.attachTo) {
+            const { query, variables, entityKey } = buildAttachMutation(
+              opts.entityRelationPath as string,
+              results.map((result) => result.id),
+              opts.attachTo,
+            );
+            await clientFetch(apiPath, query, variables, merged);
+            void queryClient.invalidateQueries({ queryKey: ["pylo", entityKey] });
+          }
+
+          // New pyloMedia rows exist now — refresh any media lists.
+          void queryClient.invalidateQueries({ queryKey: ["pylo", "pyloMedia"] });
+          setUploadedFiles(results);
+          setProgress(100);
+          optionsRef.current?.onSuccess?.(results);
+          return results;
+        } catch (thrown) {
+          // Stop the siblings still in flight. Left running they would finish
+          // in the background and create pyloMedia rows whose ids the caller
+          // never receives — unreachable files nobody can clean up.
+          controller.abort();
+          const uploadError =
+            thrown instanceof Error ? thrown : new Error(String(thrown));
+          setError(uploadError);
+          optionsRef.current?.onError?.(uploadError);
+          throw uploadError;
+        } finally {
+          setIsUploading(false);
+          // Only if a newer batch hasn't already claimed the slot.
+          if (abortRef.current === controller) abortRef.current = null;
+        }
+      },
+      [queryClient],
+    );
+
+    const abort = useCallback(() => {
+      abortRef.current?.abort();
+    }, []);
+
+    const reset = useCallback(() => {
+      setIsUploading(false);
+      setProgress(0);
+      setError(null);
+      setUploadedFiles([]);
+    }, []);
+
+    return { startUpload, isUploading, progress, error, uploadedFiles, abort, reset };
+  }
+
+  // Creates a short-lived download URL for a pyloMedia id via `createDownload`.
+  // Private-file URLs expire (default TTL ~5 minutes), so the result goes
+  // stale after 4 minutes and refetches on next use — tune `staleTimeMs` if
+  // the relation overrides its download TTL.
+  function usePyloFileUrl(
+    id: string | null | undefined,
+    queryOptions?: { staleTimeMs?: number } & RequestOptions,
+  ): UseQueryResult<string> {
+    const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    return useQuery({
+      queryKey: ["pylo", "files", "downloadUrl", id, { headers: merged }],
+      queryFn: async () => {
+        const data = (await clientFetch(
+          apiPath,
+          CREATE_DOWNLOAD_MUTATION,
+          { id: id! },
+          merged,
+        )) as { createDownload: { id: string; url: string } };
+
+        return data.createDownload.url;
+      },
+      enabled: !!id,
+      staleTime: queryOptions?.staleTimeMs ?? 4 * 60 * 1000,
+    });
+  }
+
   return {
     usePyloList,
     usePyloInfiniteList,
@@ -655,5 +865,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     usePyloEventList,
     usePyloEventPropertyKeys,
     usePyloEventFieldValues,
+    usePyloUpload,
+    usePyloFileUrl,
   };
 }

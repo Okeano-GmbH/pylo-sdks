@@ -67,6 +67,16 @@ export type {
   AggregateOptions,
   EntityAggregateApi,
   AggregateOnlyClient,
+  FilesClient,
+  UploadUrl,
+  UploadProgress,
+  UploadSource,
+  UploadOptions,
+  CreateUploadUrlOptions,
+  CreateUploadInput,
+  UploadAttachTarget,
+  PyloUploadedFile,
+  EntityRelationPath,
 } from "@pylo/core";
 
 export { PyloError } from "@pylo/core";

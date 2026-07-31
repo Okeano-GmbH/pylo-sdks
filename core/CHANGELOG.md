@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.4.0
+
+### Minor Changes
+
+- feat: adds functions and hooks for file upload to sdk
+
 ## 0.3.0
 
 ### Minor Changes

@@ -116,16 +116,16 @@ importers:
 
   node:
     dependencies:
-      jiti:
-        specifier: ^2.6.1
-        version: 2.6.1
-    devDependencies:
       '@pylo/auth':
         specifier: workspace:*
         version: link:../auth
       '@pylo/core':
         specifier: workspace:*
         version: link:../core
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
+    devDependencies:
       '@types/node':
         specifier: ^22.15.21
         version: 22.19.7
