@@ -52,7 +52,7 @@ import type {
   PyloEventInput,
   FilterInput,
   EntityName,
-  CallableEntityName,
+  EntityNameWith,
   EntitySelect,
   EntityResult,
   ListOptions,
@@ -89,7 +89,7 @@ interface ListHookResult<T> {
   refetch: UseQueryResult["refetch"];
 }
 
-type InfiniteListOptions<S, E extends CallableEntityName<S>, Sel extends EntitySelect<S, E>> = {
+type InfiniteListOptions<S, E extends EntityNameWith<S, "list">, Sel extends EntitySelect<S, E>> = {
   perPage?: number;
   select: Sel;
   filter?: FilterInput;
@@ -177,7 +177,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   const globalHeaders = options.headers;
 
   function usePyloList<
-    E extends CallableEntityName<S>,
+    E extends EntityNameWith<S, "list">,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -224,7 +224,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   }
 
   function usePyloInfiniteList<
-    E extends CallableEntityName<S>,
+    E extends EntityNameWith<S, "list">,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -302,7 +302,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   }
 
   function usePyloById<
-    E extends CallableEntityName<S>,
+    E extends EntityNameWith<S, "byId">,
     const Sel extends SelectConstraint<S, E, Sel>,
   >(
     entity: E,
@@ -365,8 +365,9 @@ export function createPyloHooks<S>(options: HooksOptions) {
   // Aggregate an entity: `metrics` keyed by alias, `groupBy` for breakdowns.
   // Resolves to `{ rows, total }` with the aliases you wrote typed on both.
   //
-  // `E` is `EntityName`, not `CallableEntityName` — system entities have no
-  // list/byId endpoints but can still be aggregated.
+  // `E` is unconstrained, unlike the other hooks: `entityInstanceAggregate`
+  // takes the entity name rather than being generated per entity, so it works
+  // even for an entity with no endpoints of its own.
   function usePyloAggregate<
     E extends EntityName<S>,
     const M extends Record<string, AggregateMetricInput<S, E>>,
@@ -453,7 +454,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
-  function usePyloUpsert<E extends CallableEntityName<S>>(
+  function usePyloUpsert<E extends EntityNameWith<S, "create" | "update">>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }, Error, UpsertInput<S, E>>,
@@ -500,7 +501,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
   // Upserts many rows of one entity in a single all-or-nothing transaction.
   // Rows without an `id`/`__search_value` are created; the ids of the affected
   // rows are returned in input order.
-  function usePyloBulkUpsert<E extends CallableEntityName<S>>(
+  function usePyloBulkUpsert<E extends EntityNameWith<S, "bulkUpsert">>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ id: string }[], Error, UpsertInput<S, E>[]>,
@@ -544,7 +545,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
     });
   }
 
-  function usePyloDelete<E extends CallableEntityName<S>>(
+  function usePyloDelete<E extends EntityNameWith<S, "delete">>(
     entity: E,
     mutationOptions?: Omit<
       UseMutationOptions<{ success: boolean }, Error, string[]>,

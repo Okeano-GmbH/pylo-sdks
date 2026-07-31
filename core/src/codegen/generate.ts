@@ -1,3 +1,4 @@
+import { ENTITY_CAPABILITY_NAMES } from "./analyze.js";
 import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
 
 const VARIANT_TYPE = "{ variant: string; value: string }";
@@ -16,13 +17,9 @@ const VARIANT_RESULT_TYPE = `{ data: ${VARIANT_RESULT_ITEM}[] } | null`;
 // omitted.
 const REGISTERABLE_SOURCES = new Set(["@pylo/node", "@pylo/nextjs"]);
 
-// Stands in for a `fields` / `relations` block that would otherwise be written
-// as an empty `{}`. Structurally identical — `keyof Record<never, never>` is
-// still `never`, so `select` keeps rejecting unknown keys — but it is a type
-// reference rather than an empty object literal, which is what
-// `@typescript-eslint/no-empty-object-type` flags in the generated output.
-// (`{ [key: string]: never }` also silences the rule but widens `keyof` to
-// `string`, which would let any relation name through.)
+// `{}` means "any non-nullish value" and trips no-empty-object-type. This keeps
+// `keyof` at `never`, so `select` still rejects unknown keys — unlike
+// `{ [key: string]: never }`, which widens it to `string`.
 const EMPTY_BLOCK = "Record<never, never>";
 
 function fieldTypeString(field: AnalyzedField): string {
@@ -40,8 +37,19 @@ function indent(text: string, level: number): string {
     .join("\n");
 }
 
-function getVariantFieldNames(entity: AnalyzedEntity): string[] {
-  return entity.fields
+// Output types carry the readable fields, input types the writable ones. The
+// two sets overlap for almost every field, but the backend gates them
+// separately and rejects a query or payload that crosses the line.
+function readableFields(entity: AnalyzedEntity): AnalyzedField[] {
+  return entity.fields.filter((f) => f.readable);
+}
+
+function writableFields(entity: AnalyzedEntity): AnalyzedField[] {
+  return entity.fields.filter((f) => f.writable);
+}
+
+function getVariantFieldNames(fields: AnalyzedField[]): string[] {
+  return fields
     .filter((f) => f.variantFieldName !== null)
     .map((f) => f.variantFieldName!);
 }
@@ -65,7 +73,7 @@ function generateReplaceVarsField(
   entity: AnalyzedEntity,
   options: { includeId: boolean },
 ): string {
-  const fieldNames = entity.fields
+  const fieldNames = writableFields(entity)
     .map((f) => f.name)
     .filter((name) => !NON_WRITABLE_FIELDS.has(name))
     .filter((name) => options.includeId || name !== "id");
@@ -84,11 +92,23 @@ function generateReplaceVarsField(
 }
 
 function generateEntityFieldsType(entity: AnalyzedEntity): string {
-  const lines = entity.fields.map((f) => `${f.name}: ${fieldTypeString(f)};`);
-  for (const variantName of getVariantFieldNames(entity)) {
+  const fields = readableFields(entity);
+  const lines = fields.map((f) => `${f.name}: ${fieldTypeString(f)};`);
+  for (const variantName of getVariantFieldNames(fields)) {
     lines.push(`${variantName}: ${VARIANT_RESULT_TYPE};`);
   }
   return lines.join("\n");
+}
+
+// The entity's endpoints as a string union — `'list' | 'byId' | …`, or `never`
+// where there are none. A union keeps the schema entry to one line and lets the
+// client pick methods with `'list' extends Capabilities<S, E>`.
+function generateCapabilityUnion(entity: AnalyzedEntity): string {
+  const granted = ENTITY_CAPABILITY_NAMES.filter(
+    (name) => entity.capabilities[name],
+  );
+  if (granted.length === 0) return "never";
+  return granted.map((name) => `'${name}'`).join(" | ");
 }
 
 function generateEntityRelationsType(entity: AnalyzedEntity): string {
@@ -107,14 +127,15 @@ const SEARCH_VALUE_FIELD =
 // separately (or not at all).
 function generateScalarFields(entity: AnalyzedEntity): string[] {
   const lines: string[] = [];
+  const fields = writableFields(entity);
 
-  for (const field of entity.fields) {
+  for (const field of fields) {
     if (field.name === "id" || field.name === "integer_id") continue;
     if (field.name === "created_at" || field.name === "updated_at") continue;
     lines.push(`${field.name}?: ${fieldTypeString(field)};`);
   }
 
-  for (const variantName of getVariantFieldNames(entity)) {
+  for (const variantName of getVariantFieldNames(fields)) {
     lines.push(`${variantName}?: ${VARIANT_TYPE}[];`);
   }
 
@@ -232,18 +253,21 @@ export function generateIndexFile(
     lines.push("}", "");
   }
 
-  // Generate create/update input types for each entity. Virtual entities have
-  // no mutation endpoints, so they get no create/update inputs.
+  // Only for the mutations the entity actually has. `PyloUsageReport` is
+  // listable but never written, so a `CreatePyloUsageReportInput` would describe
+  // a payload with nowhere to send it.
   for (const entity of entities) {
-    if (entity.isVirtual) continue;
+    if (entity.capabilities.create) {
+      lines.push(`export interface Create${entity.pascalName}Input {`);
+      lines.push(indent(generateCreateInputType(entity), 1));
+      lines.push("}", "");
+    }
 
-    lines.push(`export interface Create${entity.pascalName}Input {`);
-    lines.push(indent(generateCreateInputType(entity), 1));
-    lines.push("}", "");
-
-    lines.push(`export interface Update${entity.pascalName}Input {`);
-    lines.push(indent(generateUpdateInputType(entity), 1));
-    lines.push("}", "");
+    if (entity.capabilities.update) {
+      lines.push(`export interface Update${entity.pascalName}Input {`);
+      lines.push(indent(generateUpdateInputType(entity), 1));
+      lines.push("}", "");
+    }
   }
 
   // Generate PyloSchema
@@ -276,16 +300,20 @@ export function generateIndexFile(
       lines.push("    system: true;");
     }
 
-    // `virtual: true` marks an entity that `entityList` reports but that has no
-    // list/byId/upsert/delete endpoints. Its shape stays in the schema so
-    // `select` still types against it, but `PyloClient` drops the key so it
-    // cannot be called. `me` is served by the dedicated `client.me()` instead.
-    if (entity.isVirtual) {
-      lines.push("    virtual: true;");
-    } else {
+    if (entity.capabilities.create) {
       lines.push(`    createInput: Create${entity.pascalName}Input;`);
+    }
+    if (entity.capabilities.update) {
       lines.push(`    updateInput: Update${entity.pascalName}Input;`);
     }
+
+    // `virtual: true` still marks an entity with no endpoints at all, because
+    // `client.me()` and the `integer_id` exclusion key off it. What each entity
+    // can be *called* with now comes from `capabilities` instead.
+    if (entity.isVirtual) {
+      lines.push("    virtual: true;");
+    }
+    lines.push(`    capabilities: ${generateCapabilityUnion(entity)};`);
     lines.push("  };");
   }
   lines.push("}", "");
@@ -327,22 +355,19 @@ export function generateEntitiesFile(
   lines.push("");
 
   for (const entity of entities) {
-    // An entity with no fields and no relations would produce `interface X {}`,
-    // which means "any non-nullish value" rather than "an object with no
-    // properties". Emitting the alias instead keeps the meaning and avoids the
-    // empty-interface lint. Virtual entities in this state are dropped in
-    // `analyzeEntities`; this covers a business entity that has yet to be given
-    // a field, and instances that do not report `is_virtual`.
-    if (entity.fields.length === 0 && entity.relations.length === 0) {
+    const fields = readableFields(entity);
+
+    // `interface X {}` would mean "any non-nullish value"; the alias does not.
+    if (fields.length === 0 && entity.relations.length === 0) {
       lines.push(`export type ${entity.pascalName} = ${EMPTY_BLOCK};`, "");
       continue;
     }
 
     lines.push(`export interface ${entity.pascalName} {`);
-    for (const field of entity.fields) {
+    for (const field of fields) {
       lines.push(`  ${field.name}: ${fieldTypeString(field)};`);
     }
-    for (const variantName of getVariantFieldNames(entity)) {
+    for (const variantName of getVariantFieldNames(fields)) {
       lines.push(`  ${variantName}: ${VARIANT_RESULT_TYPE};`);
     }
     for (const rel of entity.relations) {

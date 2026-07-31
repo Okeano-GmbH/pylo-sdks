@@ -32,11 +32,18 @@ query PyloSchemaFetch($pagination: PaginationInput) {
       shortcode
       is_system_entity
       is_virtual
+      can_list
+      can_get_by_id
+      can_create
+      can_update
+      can_bulk_update
+      can_delete
       entity_fields {
         data {
           name
           data_type
           is_readable
+          is_writeable
           validation_string
           form_type
           default_value
@@ -97,10 +104,11 @@ query PyloSchemaFetch($pagination: PaginationInput) {
 export interface RawEntityField {
   name: string;
   data_type: string;
-  // Whether the field appears on the generated output type — the same gate the
-  // backend's schema generator applies. Absent on instances that predate the
-  // field; only an explicit `false` excludes it.
+  // The backend's own gates for whether a field lands on the output type and on
+  // the input types. A field without the former cannot be selected; one without
+  // the latter cannot be written. Only an explicit `false` excludes.
   is_readable?: boolean | null;
+  is_writeable?: boolean | null;
   validation_string: string | null;
   form_type: string | null;
   default_value: string | null;
@@ -136,6 +144,13 @@ export interface RawEntity {
   // entity does not imply this — `PyloUser` and friends have the full set — so
   // this is the flag codegen gates the endpoints on.
   is_virtual: boolean;
+  // Which generic endpoints the served schema actually exposes.
+  can_list: boolean;
+  can_get_by_id: boolean;
+  can_create: boolean;
+  can_update: boolean;
+  can_bulk_update: boolean;
+  can_delete: boolean;
   entity_fields: {
     data: RawEntityField[];
   } | null;

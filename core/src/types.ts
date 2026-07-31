@@ -27,8 +27,53 @@ export type SystemEntityName<S> = {
   [E in EntityName<S>]: S[E] extends { system: true } ? E : never;
 }[EntityName<S>];
 
-// Entity keys reachable as `client.<key>`.
-export type CallableEntityName<S> = Exclude<EntityName<S>, VirtualEntityName<S>>;
+// The generic endpoints an entity can expose. Aggregation is not among them:
+// `entityInstanceAggregate` takes the entity name rather than being generated
+// per entity, so it works even where nothing else does.
+export type EntityCapability =
+  | "list"
+  | "byId"
+  | "create"
+  | "update"
+  | "bulkUpsert"
+  | "delete";
+
+// What codegen recorded for this entity. A schema generated before capabilities
+// existed declares none, and is read as "everything the entity is not barred
+// from" — the behaviour the SDK had when it could not ask.
+type DeclaredCapabilities<S, E extends EntityName<S>> = S[E] extends {
+  capabilities: infer C;
+}
+  ? C
+  : S[E] extends { virtual: true }
+    ? never
+    : EntityCapability;
+
+// Whether the entity has *any* of the given endpoints. A union asks an "either"
+// question — `HasCapability<S, E, 'create' | 'update'>` is what makes `upsert`
+// reachable, since without an id it creates and with one it updates.
+export type HasCapability<
+  S,
+  E extends EntityName<S>,
+  C extends EntityCapability,
+> = [Extract<DeclaredCapabilities<S, E>, C>] extends [never] ? false : true;
+
+// Entity keys that expose the given endpoint, for constraining a call site to
+// the entities it can actually be used with.
+export type EntityNameWith<S, C extends EntityCapability> = {
+  [E in EntityName<S>]: HasCapability<S, E, C> extends true ? E : never;
+}[EntityName<S>];
+
+// Entity keys with at least one endpoint. Everything else is aggregate-only.
+export type CallableEntityName<S> = EntityNameWith<S, EntityCapability>;
+
+// The client methods an entity exposes, as a union of their names.
+export type EntityMethodName<S, E extends EntityName<S>> =
+  | (HasCapability<S, E, "list"> extends true ? "list" : never)
+  | (HasCapability<S, E, "byId"> extends true ? "byId" : never)
+  | (HasCapability<S, E, "create" | "update"> extends true ? "upsert" : never)
+  | (HasCapability<S, E, "bulkUpsert"> extends true ? "bulkUpsert" : never)
+  | (HasCapability<S, E, "delete"> extends true ? "delete" : never);
 
 // Extract the scalar fields record for an entity
 export type EntityFields<S, E extends EntityName<S>> = S[E] extends {
@@ -44,12 +89,16 @@ export type EntityRelations<S, E extends EntityName<S>> = S[E] extends {
   ? R
   : never;
 
-// Extract the updateInput type for an entity
+// The payload `upsert` takes. The update input is the wider of the two — it
+// carries the identifiers on top of the same body — so it wins where both
+// exist; an entity that can only be created falls back to its create input.
 export type UpsertInput<S, E extends EntityName<S>> = S[E] extends {
   updateInput: infer U;
 }
   ? U
-  : Record<string, unknown>;
+  : S[E] extends { createInput: infer C }
+    ? C
+    : Record<string, unknown>;
 
 // Helper: remove keys whose value is `never`
 type OmitNever<T> = {

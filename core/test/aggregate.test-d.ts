@@ -31,7 +31,8 @@ interface MockSchema {
     system: true;
     updateInput: Record<string, never>;
   };
-  // A virtual entity: no endpoints of its own, so it never reaches the client.
+  // A virtual entity: no endpoints of its own, so the client leaves it with
+  // aggregation alone.
   pyloMe: {
     fields: { id: string; integer_id: number; authenticaton_method: string };
     relations: Record<never, never>;
@@ -219,9 +220,14 @@ describe("the client surface", () => {
     void client.pyloUser.upsert({});
   });
 
-  it("keeps virtual entities off the client entirely", () => {
-    // @ts-expect-error — nothing to call: `pyloMe` is read through `client.me()`
-    void client.pyloMe;
+  it("leaves a virtual entity with aggregation and nothing else", async () => {
+    const result = await client.pyloMe.aggregate({ metrics: { rows: "count" } });
+    expectTypeOf(result.total.rows).toEqualTypeOf<number | null>();
+
+    // @ts-expect-error — no list endpoint: `pyloMe` is read through `client.me()`
+    void client.pyloMe.list({ select: { id: true } });
+    // @ts-expect-error — no upsert endpoint either
+    void client.pyloMe.upsert({});
   });
 
   it("types count as a plain number", async () => {

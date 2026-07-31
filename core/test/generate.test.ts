@@ -6,6 +6,18 @@ import {
   generateIndexFile,
 } from "../src/codegen/generate.js";
 
+// Every generic endpoint. The flags are required on `RawEntity`, so a fixture
+// that omits them describes an entity with nothing callable.
+const ALL_ENDPOINTS = {
+  is_virtual: false,
+  can_list: true,
+  can_get_by_id: true,
+  can_create: true,
+  can_update: true,
+  can_bulk_update: true,
+  can_delete: true,
+};
+
 const field = (name: string, data_type = "TEXT", validation_string = "optional") => ({
   name,
   data_type,
@@ -16,6 +28,7 @@ const contact: RawEntity = {
   name: "Contact",
   shortcode: "ct",
   is_system_entity: false,
+  ...ALL_ENDPOINTS,
   entity_fields: {
     data: [
       field("id", "TEXT", "required"),
@@ -102,6 +115,7 @@ describe("analyzeEntities — JSON fields", () => {
     name: "Doc",
     shortcode: "dc",
     is_system_entity: false,
+    ...ALL_ENDPOINTS,
     entity_fields: {
       data: [
         field("metadata", "JSON"),
@@ -162,6 +176,7 @@ describe("generateIndexFile — relation mutation fields", () => {
     name: "Company",
     shortcode: "cp",
     is_system_entity: false,
+    ...ALL_ENDPOINTS,
     entity_fields: {
       data: [field("id", "TEXT", "required"), field("legal_name")],
     },
@@ -362,21 +377,25 @@ describe("analyzeEntities — is_readable", () => {
     name: "PyloUser",
     shortcode: "pu",
     is_system_entity: true,
+    ...ALL_ENDPOINTS,
     entity_fields: {
       data: [
         { ...field("id", "TEXT", "required"), is_readable: true },
         { ...field("email"), is_readable: true },
-        { ...field("pylo_customer_id"), is_readable: false },
-        { ...field("pylo_app_id"), is_readable: false },
+        { ...field("pylo_customer_id"), is_readable: false, is_writeable: false },
+        { ...field("pylo_app_id"), is_readable: false, is_writeable: false },
       ],
     },
     entity_relations: { data: [] },
     entity_related: { data: [] },
   } as unknown as RawEntity;
 
-  it("drops fields the server will not return", () => {
+  it("records readability per field rather than dropping it", () => {
     const [entity] = analyzeEntities([mixed]);
-    expect(entity!.fields.map((f) => f.name)).toEqual(["id", "email"]);
+    expect(entity!.fields.filter((f) => f.readable).map((f) => f.name)).toEqual([
+      "id",
+      "email",
+    ]);
   });
 
   it("keeps them out of the generated types entirely", () => {
@@ -403,7 +422,7 @@ describe("analyzeEntities — is_readable", () => {
       ...mixed,
       name: "Opaque",
       entity_fields: {
-        data: [{ ...field("secret_id"), is_readable: false }],
+        data: [{ ...field("secret_id"), is_readable: false, is_writeable: false }],
       },
     } as unknown as RawEntity;
     const out = generateIndexFile(analyzeEntities([allHidden]), "@pylo/node");
@@ -421,6 +440,7 @@ describe("analyzeEntities — PyloMe key", () => {
     name: "PyloMe",
     shortcode: "pm",
     is_system_entity: true,
+    ...ALL_ENDPOINTS,
     is_virtual: true,
     entity_fields: {
       data: [field("id", "TEXT", "required"), field("authenticaton_method")],
@@ -454,6 +474,7 @@ describe("analyzeEntities — PyloMe key", () => {
       name: "Comment",
       shortcode: "cm",
       is_system_entity: false,
+      ...ALL_ENDPOINTS,
       entity_fields: { data: [field("id", "TEXT", "required")] },
       entity_relations: {
         data: [
@@ -481,6 +502,7 @@ describe("analyzeEntities — empty virtual entities", () => {
     name: "PyloEvent",
     shortcode: "PEVT",
     is_system_entity: true,
+    ...ALL_ENDPOINTS,
     is_virtual: true,
     entity_fields: { data: [] },
     entity_relations: { data: [] },
@@ -518,6 +540,7 @@ describe("generate — entities with nothing in a block", () => {
     name: "Bare",
     shortcode: "br",
     is_system_entity: false,
+    ...ALL_ENDPOINTS,
     entity_fields: { data: [] },
     entity_relations: { data: [] },
     entity_related: { data: [] },
@@ -555,6 +578,7 @@ describe("generateIndexFile — virtual entities", () => {
     name: "Me",
     shortcode: "me",
     is_system_entity: true,
+    ...ALL_ENDPOINTS,
     is_virtual: true,
     entity_fields: {
       data: [field("id", "TEXT", "required"), field("authenticaton_method")],
@@ -607,7 +631,7 @@ describe("generateIndexFile — system entities", () => {
     name: "PyloUser",
     shortcode: "pu",
     is_system_entity: true,
-    is_virtual: false,
+    ...ALL_ENDPOINTS,
     entity_fields: {
       data: [field("id", "TEXT", "required"), field("email")],
     },
@@ -681,5 +705,161 @@ describe("generateIndexFile — variant fields", () => {
     expect(entitiesFile).toContain(
       "title_variants: { data: { variant: string; value: string; is_default: boolean }[] } | null;",
     );
+  });
+});
+
+// The backend reports which generic endpoints it actually serves, per entity.
+// Being a system entity says nothing about it: PyloUser has every endpoint,
+// PyloUsageReport is read-only, and both are system entities.
+describe("generateIndexFile — capabilities", () => {
+  const withFlags = (name: string, flags: Partial<Record<string, boolean>>) =>
+    ({
+      name,
+      shortcode: name.slice(0, 2).toLowerCase(),
+      is_system_entity: true,
+      entity_fields: { data: [field("id", "TEXT", "required"), field("title")] },
+      entity_relations: { data: [] },
+      entity_related: { data: [] },
+      ...flags,
+    }) as unknown as RawEntity;
+
+  // The nested `fields` / `relations` blocks close with a deeper indent, so
+  // anchor on the newline to find the entity's own closer.
+  const blockOf = (out: string, key: string) => {
+    const start = out.indexOf(`  ${key}: {`);
+    return out.slice(start, out.indexOf("\n  };", start));
+  };
+
+  it("emits the granted endpoints as a union", () => {
+    const out = generateIndexFile(
+      analyzeEntities([
+        withFlags("PyloUser", {
+          can_list: true,
+          can_get_by_id: true,
+          can_create: true,
+          can_update: true,
+          can_bulk_update: true,
+          can_delete: true,
+        }),
+      ]),
+      "@pylo/node",
+    );
+
+    expect(blockOf(out, "pyloUser")).toContain(
+      "capabilities: 'list' | 'byId' | 'create' | 'update' | 'bulkUpsert' | 'delete';",
+    );
+  });
+
+  it("narrows a read-only entity to its two query endpoints", () => {
+    const out = generateIndexFile(
+      analyzeEntities([
+        withFlags("PyloUsageReport", {
+          can_list: true,
+          can_get_by_id: true,
+          can_create: false,
+          can_update: false,
+          can_bulk_update: false,
+          can_delete: false,
+        }),
+      ]),
+      "@pylo/node",
+    );
+
+    expect(blockOf(out, "pyloUsageReport")).toContain(
+      "capabilities: 'list' | 'byId';",
+    );
+  });
+
+  // No endpoint to send the payload to, so the type describing it is noise —
+  // and having it would let a caller build one and find nothing to call.
+  it("omits the input types for mutations the entity does not have", () => {
+    const out = generateIndexFile(
+      analyzeEntities([
+        withFlags("PyloUsageReport", {
+          can_list: true,
+          can_get_by_id: true,
+          can_create: false,
+          can_update: false,
+          can_bulk_update: false,
+          can_delete: false,
+        }),
+      ]),
+      "@pylo/node",
+    );
+
+    expect(out).not.toContain("CreatePyloUsageReportInput");
+    expect(out).not.toContain("UpdatePyloUsageReportInput");
+    // The bare input survives — a relation can still point at the entity.
+    expect(out).toContain("export interface PyloUsageReportInput {");
+  });
+
+  it("keeps create and update independent", () => {
+    const out = generateIndexFile(
+      analyzeEntities([
+        withFlags("PyloApiKey", {
+          can_list: true,
+          can_get_by_id: true,
+          can_create: true,
+          can_update: true,
+          can_bulk_update: false,
+          can_delete: true,
+        }),
+      ]),
+      "@pylo/node",
+    );
+
+    expect(blockOf(out, "pyloApiKey")).toContain(
+      "capabilities: 'list' | 'byId' | 'create' | 'update' | 'delete';",
+    );
+    expect(out).toContain("export interface CreatePyloApiKeyInput {");
+  });
+
+  it("gives a virtual entity no endpoints at all", () => {
+    const out = generateIndexFile(
+      analyzeEntities([withFlags("PyloMe", { is_virtual: true })]),
+      "@pylo/node",
+    );
+
+    expect(blockOf(out, "me")).toContain("capabilities: never;");
+  });
+
+});
+
+// A field can be readable but not writable — every `created_at`, and the
+// columns a system entity exposes but does not let you set.
+describe("generateIndexFile — is_writeable", () => {
+  const readOnlyField: RawEntity = {
+    name: "Report",
+    shortcode: "rp",
+    is_system_entity: true,
+    ...ALL_ENDPOINTS,
+    entity_fields: {
+      data: [
+        { ...field("id", "TEXT", "required"), is_readable: true, is_writeable: true },
+        { ...field("title"), is_readable: true, is_writeable: true },
+        { ...field("generated_at"), is_readable: true, is_writeable: false },
+      ],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  const out = () => generateIndexFile(analyzeEntities([readOnlyField]), "@pylo/node");
+
+  it("keeps an unwritable field selectable", () => {
+    const start = out().indexOf("  report: {");
+    expect(out().slice(start, out().indexOf("\n  };", start))).toContain(
+      "generated_at: string | null;",
+    );
+  });
+
+  it("keeps it out of every input type", () => {
+    const inputs = out().slice(0, out().indexOf("export interface PyloSchema"));
+    expect(inputs).toContain("title?: string | null;");
+    expect(inputs).not.toContain("generated_at?:");
+  });
+
+  it("keeps it out of __replace_vars", () => {
+    expect(out()).not.toContain("'generated_at'");
   });
 });

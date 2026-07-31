@@ -4,9 +4,34 @@ export interface AnalyzedField {
   name: string;
   tsType: string;
   nullable: boolean;
+  // Whether the field is on the generated output type / input types. Selecting
+  // an unreadable field or writing an unwritable one is a server-side error, so
+  // each emission site filters on the one that applies to it.
+  readable: boolean;
+  writable: boolean;
   variantFieldName: string | null;
   enum: { typeName: string; values: string[] } | null;
 }
+
+// Generic endpoints an entity exposes. Every entity can be aggregated, so that
+// is not part of the set.
+export interface EntityCapabilities {
+  list: boolean;
+  byId: boolean;
+  create: boolean;
+  update: boolean;
+  bulkUpsert: boolean;
+  delete: boolean;
+}
+
+export const ENTITY_CAPABILITY_NAMES = [
+  "list",
+  "byId",
+  "create",
+  "update",
+  "bulkUpsert",
+  "delete",
+] as const satisfies ReadonlyArray<keyof EntityCapabilities>;
 
 export interface AnalyzedRelation {
   fieldName: string;
@@ -24,6 +49,7 @@ export interface AnalyzedEntity {
   // No list/byId/upsert/delete endpoints — `PyloMe` and `PyloEvent`, which are
   // read through `me` / `pyloEventList` instead.
   isVirtual: boolean;
+  capabilities: EntityCapabilities;
   fields: AnalyzedField[];
   relations: AnalyzedRelation[];
 }
@@ -45,8 +71,17 @@ function mapDataType(dataType: string): string {
   return DATA_TYPE_MAP[dataType] ?? "string";
 }
 
+// Validation strings are `;`-separated rules, each optionally carrying
+// `:params` — "required", but also "required;unique" or "min:0;required".
+function hasValidationRule(validationString: string | null, rule: string): boolean {
+  if (!validationString) return false;
+  return validationString
+    .split(";")
+    .some((part) => part.split(":", 1)[0]?.trim() === rule);
+}
+
 function isNullable(field: RawEntityField): boolean {
-  return field.validation_string !== "required";
+  return !hasValidationRule(field.validation_string, "required");
 }
 
 function classifyRelation(
@@ -92,12 +127,8 @@ function getMutationSuffixes(
     : ["_set", "_connect", "_disconnect"];
 }
 
-// The authenticated principal is reached through `client.me()`, which types
-// against the schema key `me` (see `Me<S>` in client.ts — it resolves to `never`
-// for any other key, making the method uncallable). The backend names the entity
-// `PyloMe`, so the key is remapped here. `pascalName` keeps the real name, so
-// `PyloMeInput` and the `entities.ts` interface are unaffected, and relations
-// pointing at it resolve to the same key.
+// `Me<S>` keys off the literal string `me` and resolves to `never` for anything
+// else, so `PyloMe` has to land on that key or `client.me()` is uncallable.
 const ENTITY_KEY_OVERRIDES: Record<string, string> = {
   PyloMe: "me",
 };
@@ -122,6 +153,10 @@ function analyzeField(
 ): AnalyzedField {
   const hasVariants = field.variant_entity_field?.data?.name != null;
   const enumValues = field.entity_field_enum_values?.data ?? [];
+  const access = {
+    readable: field.is_readable !== false,
+    writable: field.is_writeable !== false,
+  };
 
   if (enumValues.length > 0) {
     const typeName = `${entityPascalName}${toPascalCase(field.name)}`;
@@ -130,6 +165,7 @@ function analyzeField(
       name: field.name,
       tsType: typeName,
       nullable: isNullable(field),
+      ...access,
       variantFieldName: hasVariants ? `${field.name}_variants` : null,
       enum: { typeName, values },
     };
@@ -139,6 +175,7 @@ function analyzeField(
     name: field.name,
     tsType: mapDataType(field.data_type),
     nullable: isNullable(field),
+    ...access,
     variantFieldName: hasVariants ? `${field.name}_variants` : null,
     enum: null,
   };
@@ -193,18 +230,38 @@ interface SystemEntityLookup {
   of: (entityName: string) => boolean;
 }
 
-// A virtual entity with no fields and no relations has nothing to describe:
-// every generated type for it would be an empty `{}`, and the client drops the
-// key anyway. Today that is PyloEvent, whose rows live in ClickHouse and are
-// read through `client.events` rather than the entity endpoints. Virtual
-// entities that do carry a shape (PyloMe) are kept — `client.me()` types
-// against one.
+// Nothing to describe and no endpoints to reach it by — every type generated
+// for it would be an empty `{}`. Today: PyloEvent, read through `client.events`.
 function hasNothingToEmit(entity: AnalyzedEntity): boolean {
   return (
     entity.isVirtual &&
-    entity.fields.length === 0 &&
+    entity.fields.filter((f) => f.readable).length === 0 &&
     entity.relations.length === 0
   );
+}
+
+// Virtual entities are the one case decided without asking the backend: they
+// have no generic endpoints by definition.
+function analyzeCapabilities(entity: RawEntity): EntityCapabilities {
+  if (entity.is_virtual) {
+    return {
+      list: false,
+      byId: false,
+      create: false,
+      update: false,
+      bulkUpsert: false,
+      delete: false,
+    };
+  }
+
+  return {
+    list: entity.can_list,
+    byId: entity.can_get_by_id,
+    create: entity.can_create,
+    update: entity.can_update,
+    bulkUpsert: entity.can_bulk_update,
+    delete: entity.can_delete,
+  };
 }
 
 export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
@@ -216,14 +273,11 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
   const isSystemEntity = (name: string) => systemByName.get(name) ?? false;
 
   const analyzed = rawEntities.map((entity) => {
-    // `is_readable: false` means the field is not on the generated output type,
-    // so selecting it is a server-side error. System entities report it for
-    // their foreign-key columns (`pylo_customer_id`, `parent_id`, …) and for
-    // any entity whose table is not its queryable shape (PyloMe). Custom
-    // entities report every field readable.
-    const fields = (entity.entity_fields?.data ?? [])
-      .filter((f) => f.is_readable !== false)
-      .map((f) => analyzeField(f, entity.name));
+    // Kept whole, readable or not: the output and input types filter on
+    // different flags, so the split happens where each one is emitted.
+    const fields = (entity.entity_fields?.data ?? []).map((f) =>
+      analyzeField(f, entity.name),
+    );
 
     const isSystem: SystemEntityLookup = {
       owner: entity.is_system_entity,
@@ -248,6 +302,7 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
       shortcode: entity.shortcode,
       isSystem: entity.is_system_entity,
       isVirtual: entity.is_virtual,
+      capabilities: analyzeCapabilities(entity),
       fields,
       relations: [...forwardRelations, ...deduped],
     };

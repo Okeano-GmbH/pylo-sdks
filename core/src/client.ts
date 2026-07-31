@@ -65,7 +65,7 @@ import type {
   ByIdOptions,
   ListResult,
   SelectConstraint,
-  CallableEntityName,
+  EntityMethodName,
   UpsertInput,
   RequestOptions,
   MutationRequestOptions,
@@ -103,8 +103,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
 }
 
-// Aggregation over an entity. Kept separate from the rest of `EntityClient` so
-// the two aggregate surfaces — entities and the event store — stay comparable.
+// Aggregation over an entity. Split out from the rest of `EntityClient` because
+// it is the one thing every entity can do, whatever its capabilities say.
 export interface EntityAggregateApi<S, E extends EntityName<S>> {
   // Metrics are keyed by alias (`{ revenue: { sum: "amount" } }`) and read back
   // by the same keys: `total.revenue`. `groupBy` adds breakdown rows; without it
@@ -120,7 +120,12 @@ export interface EntityAggregateApi<S, E extends EntityName<S>> {
   count(options?: { query?: QueryInput[] } & RequestOptions): Promise<number>;
 }
 
-export interface EntityClient<S, E extends EntityName<S>> extends EntityAggregateApi<S, E> {
+// What an entity with no endpoints of its own is left with. `EntityClient`
+// resolves to exactly this when the entity's capability set is empty.
+export type AggregateOnlyClient<S, E extends EntityName<S>> = EntityAggregateApi<S, E>;
+
+// Every generic method, before the entity's own capabilities narrow it down.
+interface FullEntityClient<S, E extends EntityName<S>> {
   list<Sel extends SelectConstraint<S, E, Sel>>(
     options: ListOptions<S, E, Sel> & RequestOptions,
   ): Promise<ListResult<EntityResult<S, E, Sel>>>;
@@ -142,6 +147,16 @@ export interface EntityClient<S, E extends EntityName<S>> extends EntityAggregat
 
   delete(ids: string[], options?: MutationRequestOptions): Promise<{ success: boolean }>;
 }
+
+// What `client.<entity>` exposes: the methods the entity's endpoints support,
+// plus aggregation, which every entity supports. A method the backend has no
+// endpoint for is not on the type at all, so calling it is a compile error
+// rather than a request the server rejects.
+export type EntityClient<S, E extends EntityName<S>> = Pick<
+  FullEntityClient<S, E>,
+  EntityMethodName<S, E>
+> &
+  EntityAggregateApi<S, E>;
 
 // Ingests custom events. Event names are namespaced under "custom." by the
 // backend (the prefix is added if missing) and `ts` is server-generated.
@@ -230,11 +245,12 @@ export interface FilesClient<S> {
   getDownloadUrl(id: string, options?: RequestOptions): Promise<string>;
 }
 
+// Every entity is reachable; what it carries depends on its endpoints. One with
+// none left — a read-only report, say — still aggregates, since
+// `entityInstanceAggregate` is keyed by entity name rather than generated per
+// entity. `me` and the other reserved keys are excluded and defined below.
 export type PyloClient<S> = {
-  // Virtual entities are absent: they have no endpoints to call, and the two
-  // that exist are reached through their own handling — `client.me()` and
-  // `client.events`.
-  [E in Exclude<CallableEntityName<S>, ReservedClientKey>]: EntityClient<S, E>;
+  [E in Exclude<EntityName<S>, ReservedClientKey>]: EntityClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
   events: EventsClient;
@@ -383,12 +399,15 @@ async function runEventAggregate(
   return toAggregateResult(result.data, result.aggregations, options);
 }
 
+// Builds every method, whatever the entity's capabilities say — the narrowing
+// is a type-level gate, and there is nothing useful to do at runtime for a
+// method the caller could not have reached in the first place.
 function createEntityClient<S, E extends EntityName<S>>(
   entityKey: string,
   endpoint: string,
   auth: AuthProvider,
   globalHeaders?: Record<string, string>,
-): EntityClient<S, E> {
+): FullEntityClient<S, E> & EntityAggregateApi<S, E> {
   return {
     async list(options) {
       const { query, variables } = buildListQuery(
