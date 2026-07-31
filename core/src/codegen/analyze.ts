@@ -92,7 +92,19 @@ function getMutationSuffixes(
     : ["_set", "_connect", "_disconnect"];
 }
 
+// The authenticated principal is reached through `client.me()`, which types
+// against the schema key `me` (see `Me<S>` in client.ts — it resolves to `never`
+// for any other key, making the method uncallable). The backend names the entity
+// `PyloMe`, so the key is remapped here. `pascalName` keeps the real name, so
+// `PyloMeInput` and the `entities.ts` interface are unaffected, and relations
+// pointing at it resolve to the same key.
+const ENTITY_KEY_OVERRIDES: Record<string, string> = {
+  PyloMe: "me",
+};
+
 function toEntityKey(pascalName: string): string {
+  const override = ENTITY_KEY_OVERRIDES[pascalName];
+  if (override !== undefined) return override;
   return pascalName.charAt(0).toLowerCase() + pascalName.slice(1);
 }
 
@@ -181,6 +193,20 @@ interface SystemEntityLookup {
   of: (entityName: string) => boolean;
 }
 
+// A virtual entity with no fields and no relations has nothing to describe:
+// every generated type for it would be an empty `{}`, and the client drops the
+// key anyway. Today that is PyloEvent, whose rows live in ClickHouse and are
+// read through `client.events` rather than the entity endpoints. Virtual
+// entities that do carry a shape (PyloMe) are kept — `client.me()` types
+// against one.
+function hasNothingToEmit(entity: AnalyzedEntity): boolean {
+  return (
+    entity.isVirtual &&
+    entity.fields.length === 0 &&
+    entity.relations.length === 0
+  );
+}
+
 export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
   const systemByName = new Map(
     rawEntities.map((e) => [e.name, e.is_system_entity]),
@@ -189,10 +215,15 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
   // `_connect`/`_disconnect` pair used everywhere outside the Pylo internals.
   const isSystemEntity = (name: string) => systemByName.get(name) ?? false;
 
-  return rawEntities.map((entity) => {
-    const fields = (entity.entity_fields?.data ?? []).map((f) =>
-      analyzeField(f, entity.name),
-    );
+  const analyzed = rawEntities.map((entity) => {
+    // `is_readable: false` means the field is not on the generated output type,
+    // so selecting it is a server-side error. System entities report it for
+    // their foreign-key columns (`pylo_customer_id`, `parent_id`, …) and for
+    // any entity whose table is not its queryable shape (PyloMe). Custom
+    // entities report every field readable.
+    const fields = (entity.entity_fields?.data ?? [])
+      .filter((f) => f.is_readable !== false)
+      .map((f) => analyzeField(f, entity.name));
 
     const isSystem: SystemEntityLookup = {
       owner: entity.is_system_entity,
@@ -221,4 +252,6 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
       relations: [...forwardRelations, ...deduped],
     };
   });
+
+  return analyzed.filter((entity) => !hasNothingToEmit(entity));
 }

@@ -16,6 +16,15 @@ const VARIANT_RESULT_TYPE = `{ data: ${VARIANT_RESULT_ITEM}[] } | null`;
 // omitted.
 const REGISTERABLE_SOURCES = new Set(["@pylo/node", "@pylo/nextjs"]);
 
+// Stands in for a `fields` / `relations` block that would otherwise be written
+// as an empty `{}`. Structurally identical — `keyof Record<never, never>` is
+// still `never`, so `select` keeps rejecting unknown keys — but it is a type
+// reference rather than an empty object literal, which is what
+// `@typescript-eslint/no-empty-object-type` flags in the generated output.
+// (`{ [key: string]: never }` also silences the rule but widens `keyof` to
+// `string`, which would let any relation name through.)
+const EMPTY_BLOCK = "Record<never, never>";
+
 function fieldTypeString(field: AnalyzedField): string {
   if (field.nullable) {
     return `${field.tsType} | null`;
@@ -241,16 +250,24 @@ export function generateIndexFile(
   lines.push("export interface PyloSchema {");
   for (const entity of entities) {
     lines.push(`  ${entity.key}: {`);
-    lines.push("    fields: {");
-    lines.push(indent(generateEntityFieldsType(entity), 3));
-    lines.push("    };");
+
+    const fieldsType = generateEntityFieldsType(entity);
+    if (fieldsType) {
+      lines.push("    fields: {");
+      lines.push(indent(fieldsType, 3));
+      lines.push("    };");
+    } else {
+      lines.push(`    fields: ${EMPTY_BLOCK};`);
+    }
 
     const relType = generateEntityRelationsType(entity);
-    lines.push("    relations: {");
     if (relType) {
+      lines.push("    relations: {");
       lines.push(indent(relType, 3));
+      lines.push("    };");
+    } else {
+      lines.push(`    relations: ${EMPTY_BLOCK};`);
     }
-    lines.push("    };");
 
     // `system: true` marks a Pylo-internal entity. It says nothing about which
     // endpoints exist — system entities list and upsert like any other — but
@@ -310,6 +327,17 @@ export function generateEntitiesFile(
   lines.push("");
 
   for (const entity of entities) {
+    // An entity with no fields and no relations would produce `interface X {}`,
+    // which means "any non-nullish value" rather than "an object with no
+    // properties". Emitting the alias instead keeps the meaning and avoids the
+    // empty-interface lint. Virtual entities in this state are dropped in
+    // `analyzeEntities`; this covers a business entity that has yet to be given
+    // a field, and instances that do not report `is_virtual`.
+    if (entity.fields.length === 0 && entity.relations.length === 0) {
+      lines.push(`export type ${entity.pascalName} = ${EMPTY_BLOCK};`, "");
+      continue;
+    }
+
     lines.push(`export interface ${entity.pascalName} {`);
     for (const field of entity.fields) {
       lines.push(`  ${field.name}: ${fieldTypeString(field)};`);

@@ -36,6 +36,7 @@ query PyloSchemaFetch($pagination: PaginationInput) {
         data {
           name
           data_type
+          is_readable
           validation_string
           form_type
           default_value
@@ -96,6 +97,10 @@ query PyloSchemaFetch($pagination: PaginationInput) {
 export interface RawEntityField {
   name: string;
   data_type: string;
+  // Whether the field appears on the generated output type — the same gate the
+  // backend's schema generator applies. Absent on instances that predate the
+  // field; only an explicit `false` excludes it.
+  is_readable?: boolean | null;
   validation_string: string | null;
   form_type: string | null;
   default_value: string | null;

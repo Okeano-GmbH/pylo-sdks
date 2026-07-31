@@ -353,6 +353,203 @@ describe("generateIndexFile — schema registration", () => {
   });
 });
 
+// `is_readable: false` means the backend's schema generator leaves the field off
+// the output type (GraphQLService: `if ($isOutputType && !$modelField->is_readable) continue;`),
+// so selecting it fails server-side. System entities report it for their
+// foreign-key columns; custom entity fields are always readable.
+describe("analyzeEntities — is_readable", () => {
+  const mixed: RawEntity = {
+    name: "PyloUser",
+    shortcode: "pu",
+    is_system_entity: true,
+    entity_fields: {
+      data: [
+        { ...field("id", "TEXT", "required"), is_readable: true },
+        { ...field("email"), is_readable: true },
+        { ...field("pylo_customer_id"), is_readable: false },
+        { ...field("pylo_app_id"), is_readable: false },
+      ],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  it("drops fields the server will not return", () => {
+    const [entity] = analyzeEntities([mixed]);
+    expect(entity!.fields.map((f) => f.name)).toEqual(["id", "email"]);
+  });
+
+  it("keeps them out of the generated types entirely", () => {
+    const out = generateIndexFile(analyzeEntities([mixed]), "@pylo/node");
+    expect(out).not.toContain("pylo_customer_id");
+    expect(out).not.toContain("pylo_app_id");
+    expect(out).toContain("email: string | null;");
+  });
+
+  // Instances that predate the field report nothing; only an explicit `false`
+  // excludes a field, so an older backend keeps its current output.
+  it("keeps fields when the flag is absent", () => {
+    const legacy = {
+      ...mixed,
+      entity_fields: { data: [field("id", "TEXT", "required"), field("email")] },
+    } as unknown as RawEntity;
+    expect(analyzeEntities([legacy])[0]!.fields).toHaveLength(2);
+  });
+
+  // An entity whose every field is unreadable still has to produce valid output
+  // rather than an empty block.
+  it("falls back to the empty-block stand-in when nothing is readable", () => {
+    const allHidden = {
+      ...mixed,
+      name: "Opaque",
+      entity_fields: {
+        data: [{ ...field("secret_id"), is_readable: false }],
+      },
+    } as unknown as RawEntity;
+    const out = generateIndexFile(analyzeEntities([allHidden]), "@pylo/node");
+    expect(out).toContain("fields: Record<never, never>;");
+    expect(out).not.toContain("secret_id");
+  });
+});
+
+// `client.me()` types against the schema key `me` — `Me<S>` in client.ts is
+// `"me" extends EntityName<S> ? (…) : never`, so any other key makes the method
+// uncallable. The backend names the entity `PyloMe`, which the default
+// first-character-lowercase rule would turn into `pyloMe`.
+describe("analyzeEntities — PyloMe key", () => {
+  const pyloMe: RawEntity = {
+    name: "PyloMe",
+    shortcode: "pm",
+    is_system_entity: true,
+    is_virtual: true,
+    entity_fields: {
+      data: [field("id", "TEXT", "required"), field("authenticaton_method")],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  it("keys PyloMe as `me` so client.me() resolves", () => {
+    const [entity] = analyzeEntities([pyloMe]);
+    expect(entity!.key).toBe("me");
+  });
+
+  it("keeps the real name for the emitted type names", () => {
+    const [entity] = analyzeEntities([pyloMe]);
+    expect(entity!.pascalName).toBe("PyloMe");
+    const out = generateIndexFile([entity!], "@pylo/node");
+    expect(out).toContain("export interface PyloMeInput {");
+    expect(out).toContain("  me: {");
+  });
+
+  it("leaves other Pylo-prefixed entities alone", () => {
+    const pyloUser = { ...pyloMe, name: "PyloUser" } as RawEntity;
+    expect(analyzeEntities([pyloUser])[0]!.key).toBe("pyloUser");
+  });
+
+  // A relation pointing at it has to name the same key, or the schema's
+  // `relations` entry would reference an entity that isn't there.
+  it("uses the override for relation targets too", () => {
+    const owner = {
+      name: "Comment",
+      shortcode: "cm",
+      is_system_entity: false,
+      entity_fields: { data: [field("id", "TEXT", "required")] },
+      entity_relations: {
+        data: [
+          {
+            type: "ManyToOne",
+            field_name: "author",
+            target_field_name: "comments",
+            target_entity: { data: { name: "PyloMe" } },
+            entity: { data: { name: "Comment" } },
+          },
+        ],
+      },
+      entity_related: { data: [] },
+    } as unknown as RawEntity;
+    const [comment] = analyzeEntities([owner, pyloMe]);
+    expect(comment!.relations[0]!.targetEntityKey).toBe("me");
+  });
+});
+
+// A virtual entity carrying neither fields nor relations describes nothing —
+// PyloEvent, whose rows live in ClickHouse. Everything generated for it would
+// be an empty `{}`, and the client drops the key regardless.
+describe("analyzeEntities — empty virtual entities", () => {
+  const pyloEvent: RawEntity = {
+    name: "PyloEvent",
+    shortcode: "PEVT",
+    is_system_entity: true,
+    is_virtual: true,
+    entity_fields: { data: [] },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  it("drops it entirely", () => {
+    const analyzed = analyzeEntities([contact, pyloEvent]);
+    expect(analyzed.map((e) => e.pascalName)).toEqual(["Contact"]);
+  });
+
+  it("keeps a virtual entity that has a shape", () => {
+    const pyloMe = {
+      ...pyloEvent,
+      name: "PyloMe",
+      entity_fields: { data: [field("id", "TEXT", "required")] },
+    } as unknown as RawEntity;
+    expect(analyzeEntities([pyloMe]).map((e) => e.key)).toEqual(["me"]);
+  });
+
+  // Without the flag there is nothing to key the decision on, so the entity is
+  // emitted — the generators fall back to a non-empty stand-in instead.
+  it("keeps an empty entity that is not flagged virtual", () => {
+    const unflagged = { ...pyloEvent, is_virtual: undefined } as RawEntity;
+    expect(analyzeEntities([unflagged])).toHaveLength(1);
+  });
+});
+
+// `{}` in TypeScript means "any non-nullish value", not "an object with no
+// properties" — hence the no-empty-object-type lint. `Record<never, never>`
+// carries the intended meaning: `keyof` stays `never`, so `select` still
+// rejects unknown keys.
+describe("generate — entities with nothing in a block", () => {
+  const bare: RawEntity = {
+    name: "Bare",
+    shortcode: "br",
+    is_system_entity: false,
+    entity_fields: { data: [] },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  it("never writes an empty fields or relations block", () => {
+    const out = generateIndexFile(analyzeEntities([contact, bare]), "@pylo/node");
+    expect(out).not.toMatch(/(fields|relations): \{\s*\};/);
+    expect(out).toContain("fields: Record<never, never>;");
+    expect(out).toContain("relations: Record<never, never>;");
+  });
+
+  // Contact has fields but no relations — the common case, 13 entities in a
+  // real schema.
+  it("uses it for the relations block of an ordinary entity", () => {
+    const out = generateIndexFile(analyzeEntities([contact]), "@pylo/node");
+    expect(out).toContain("relations: Record<never, never>;");
+    expect(out).toContain("first_name: string | null;");
+  });
+
+  it("never writes an empty interface into entities.ts", () => {
+    const out = generateEntitiesFile(analyzeEntities([bare]), "@pylo/node");
+    expect(out).not.toContain("export interface Bare {}");
+    expect(out).toContain("export type Bare = Record<never, never>;");
+  });
+
+  it("still writes a real interface when there is something to describe", () => {
+    const out = generateEntitiesFile(analyzeEntities([contact]), "@pylo/node");
+    expect(out).toContain("export interface Contact {");
+  });
+});
+
 describe("generateIndexFile — virtual entities", () => {
   const me: RawEntity = {
     name: "Me",
