@@ -21,6 +21,9 @@ export interface AnalyzedEntity {
   pascalName: string;
   shortcode: string;
   isSystem: boolean;
+  // No list/byId/upsert/delete endpoints — `PyloMe` and `PyloEvent`, which are
+  // read through `me` / `pyloEventList` instead.
+  isVirtual: boolean;
   fields: AnalyzedField[];
   relations: AnalyzedRelation[];
 }
@@ -213,6 +216,7 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
       pascalName: entity.name,
       shortcode: entity.shortcode,
       isSystem: entity.is_system_entity,
+      isVirtual: entity.is_virtual,
       fields,
       relations: [...forwardRelations, ...deduped],
     };

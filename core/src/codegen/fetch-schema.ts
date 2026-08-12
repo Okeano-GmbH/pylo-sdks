@@ -31,6 +31,7 @@ query PyloSchemaFetch($pagination: PaginationInput) {
       name
       shortcode
       is_system_entity
+      is_virtual
       entity_fields {
         data {
           name
@@ -126,6 +127,10 @@ export interface RawEntity {
   name: string;
   shortcode: string;
   is_system_entity: boolean;
+  // Whether the entity has no list/byId/upsert/delete endpoints. Being a system
+  // entity does not imply this — `PyloUser` and friends have the full set — so
+  // this is the flag codegen gates the endpoints on.
+  is_virtual: boolean;
   entity_fields: {
     data: RawEntityField[];
   } | null;

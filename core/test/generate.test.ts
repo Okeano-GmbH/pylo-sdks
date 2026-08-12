@@ -355,6 +355,7 @@ describe("generateIndexFile — virtual entities", () => {
     name: "Me",
     shortcode: "me",
     is_system_entity: true,
+    is_virtual: true,
     entity_fields: {
       data: [field("id", "TEXT", "required"), field("authenticaton_method")],
     },
@@ -396,5 +397,45 @@ describe("generateIndexFile — virtual entities", () => {
       out().indexOf("me: {"),
     );
     expect(contactBlock).not.toContain("virtual");
+  });
+});
+
+describe("generateIndexFile — system entities", () => {
+  // A system entity that isn't virtual: `PyloUser` has the same
+  // list/byId/upsert/delete endpoints as any custom entity.
+  const pyloUser: RawEntity = {
+    name: "PyloUser",
+    shortcode: "pu",
+    is_system_entity: true,
+    is_virtual: false,
+    entity_fields: {
+      data: [field("id", "TEXT", "required"), field("email")],
+    },
+    entity_relations: { data: [] },
+    entity_related: { data: [] },
+  } as unknown as RawEntity;
+
+  const out = () => generateIndexFile(analyzeEntities([contact, pyloUser]), "@pylo/node");
+
+  // The entity's entry in `PyloSchema`, which ends at the first dedented `};`.
+  const block = () => {
+    const generated = out();
+    const start = generated.indexOf("pyloUser: {");
+    return generated.slice(start, generated.indexOf("\n  };", start));
+  };
+
+  it("does not mark it virtual", () => {
+    expect(block()).not.toContain("virtual: true;");
+  });
+
+  it("marks it system, so aggregates keep `integer_id`", () => {
+    expect(block()).toContain("system: true;");
+  });
+
+  it("gives it create/update inputs, so it can be listed and upserted", () => {
+    expect(out()).toContain("export interface CreatePyloUserInput {");
+    expect(out()).toContain("export interface UpdatePyloUserInput {");
+    expect(block()).toContain("createInput: CreatePyloUserInput;");
+    expect(block()).toContain("updateInput: UpdatePyloUserInput;");
   });
 });

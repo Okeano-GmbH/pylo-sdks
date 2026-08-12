@@ -69,7 +69,6 @@ import type {
   UpsertInput,
   RequestOptions,
   MutationRequestOptions,
-  VirtualEntityName,
 } from "./types.js";
 
 export const PYLO_DRY_RUN_HEADER = "pylo-dry-run";
@@ -104,8 +103,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
 }
 
-// Aggregation over an entity. Split out from `EntityClient` because system
-// entities support it while supporting nothing else — see `AggregateOnlyClient`.
+// Aggregation over an entity. Kept separate from the rest of `EntityClient` so
+// the two aggregate surfaces — entities and the event store — stay comparable.
 export interface EntityAggregateApi<S, E extends EntityName<S>> {
   // Metrics are keyed by alias (`{ revenue: { sum: "amount" } }`) and read back
   // by the same keys: `total.revenue`. `groupBy` adds breakdown rows; without it
@@ -120,11 +119,6 @@ export interface EntityAggregateApi<S, E extends EntityName<S>> {
   // How many rows match — the common case of the above, without the ceremony.
   count(options?: { query?: QueryInput[] } & RequestOptions): Promise<number>;
 }
-
-// What a system ("virtual") entity exposes. It has no list/byId/upsert/delete
-// endpoints, but the aggregate resolver reads it happily — its fields live in
-// native columns rather than `entity_field_instances`.
-export type AggregateOnlyClient<S, E extends EntityName<S>> = EntityAggregateApi<S, E>;
 
 export interface EntityClient<S, E extends EntityName<S>> extends EntityAggregateApi<S, E> {
   list<Sel extends SelectConstraint<S, E, Sel>>(
@@ -208,8 +202,7 @@ export type Me<S> = "me" extends EntityName<S>
     ) => Promise<EntityResult<S, "me" & EntityName<S>, Sel>>
   : never;
 
-// Keys the client reserves for itself. They shadow any entity of the same name,
-// so they must also be kept out of the virtual-entity mapping below.
+// Keys the client reserves for itself. They shadow any entity of the same name.
 type ReservedClientKey = "ingestEvents" | "events" | "me" | "files";
 
 // File upload/download. Pylo uploads are a two-step uploadUrl flow: `createUpload`
@@ -238,12 +231,10 @@ export interface FilesClient<S> {
 }
 
 export type PyloClient<S> = {
-  [E in CallableEntityName<S>]: EntityClient<S, E>;
-} & {
-  // System entities expose no list/byId/upsert/delete endpoints, but they *can*
-  // be aggregated — `pylo.pyloUser.aggregate(…)` counts users. They surface with
-  // that one method rather than staying unreachable.
-  [E in Exclude<VirtualEntityName<S>, ReservedClientKey>]: AggregateOnlyClient<S, E>;
+  // Virtual entities are absent: they have no endpoints to call, and the two
+  // that exist are reached through their own handling — `client.me()` and
+  // `client.events`.
+  [E in Exclude<CallableEntityName<S>, ReservedClientKey>]: EntityClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
   events: EventsClient;

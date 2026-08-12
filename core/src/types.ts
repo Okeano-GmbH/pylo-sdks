@@ -11,12 +11,20 @@ import type {
 // Extract entity key strings from a PyloSchema
 export type EntityName<S> = string & keyof S;
 
-// Entities that `entityList` reports but that expose no list/byId/upsert/delete
-// endpoints — codegen marks them `virtual: true`. Their shape stays in the
-// schema so `select` and `EntityResult` still work (and so relations can point
-// at them), but they are dropped from `PyloClient` so they cannot be called.
+// Entities with no `entity_instances` rows behind them — codegen marks them
+// `virtual: true` from `is_virtual`. Their shape stays in the schema so
+// `select` and `EntityResult` still work (and so relations can point at them),
+// but they are read through their own endpoints (`client.me()`,
+// `client.events`) rather than the generic ones.
 export type VirtualEntityName<S> = {
   [E in EntityName<S>]: S[E] extends { virtual: true } ? E : never;
+}[EntityName<S>];
+
+// Pylo-internal entities (`PyloUser`, `PyloMedia`, …), marked `system: true`.
+// They are ordinary callables — what sets them apart is that their fields live
+// in native columns rather than `entity_field_instances`.
+export type SystemEntityName<S> = {
+  [E in EntityName<S>]: S[E] extends { system: true } ? E : never;
 }[EntityName<S>];
 
 // Entity keys reachable as `client.<key>`.
@@ -243,7 +251,7 @@ export type NumericFieldName<S, E extends EntityName<S>> = Exclude<
       : never;
   }[keyof EntityFields<S, E>] &
     string,
-  E extends VirtualEntityName<S> ? never : "integer_id"
+  E extends SystemEntityName<S> ? never : "integer_id"
 >;
 
 // One metric. `"count"` is shorthand for counting rows; `{ count: field }` counts

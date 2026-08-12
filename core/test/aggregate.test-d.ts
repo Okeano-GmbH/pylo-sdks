@@ -23,10 +23,19 @@ interface MockSchema {
     relations: Record<never, never>;
     updateInput: Record<string, never>;
   };
-  // A system entity: aggregatable, but with no other endpoints.
+  // A system entity: same endpoints as any other, but its fields are native
+  // columns, so `integer_id` is a real metric.
   pyloUser: {
     fields: { id: string; integer_id: number; email: string };
     relations: Record<never, never>;
+    system: true;
+    updateInput: Record<string, never>;
+  };
+  // A virtual entity: no endpoints of its own, so it never reaches the client.
+  pyloMe: {
+    fields: { id: string; integer_id: number; authenticaton_method: string };
+    relations: Record<never, never>;
+    system: true;
     virtual: true;
   };
 }
@@ -205,9 +214,14 @@ describe("the client surface", () => {
     expectTypeOf(result.total.users).toEqualTypeOf<number | null>();
   });
 
-  it("does not expose list on a system entity", () => {
-    // @ts-expect-error — system entities have no list endpoint
-    void client.pyloUser.list;
+  it("exposes list and upsert on a system entity", async () => {
+    void client.pyloUser.list({ select: { email: true } });
+    void client.pyloUser.upsert({});
+  });
+
+  it("keeps virtual entities off the client entirely", () => {
+    // @ts-expect-error — nothing to call: `pyloMe` is read through `client.me()`
+    void client.pyloMe;
   });
 
   it("types count as a plain number", async () => {
