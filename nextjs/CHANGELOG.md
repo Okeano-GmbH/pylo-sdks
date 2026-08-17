@@ -1,5 +1,22 @@
 # @pylo/nextjs
 
+## 0.4.2
+
+### Patch Changes
+
+- Fix the generated type of variant fields, and select `is_default`
+
+  Variant fields are queried enveloped — `<field>_variants { data { value variant } }` — but codegen typed them as a bare list, so `row.title_variants.map(…)` type-checked and then blew up at runtime. The read type is now `{ data: { variant, value, is_default }[] } | null`, matching the wire and the shape relations already use.
+
+  The selection also asks for `is_default`, the flag marking the variant a field falls back to. It was never requested before, so it could not be read at all.
+
+  Write types are unchanged: inputs still take the bare `{ variant, value }[]`.
+
+  Re-run codegen after upgrading. Reads of variant fields need a `.data` hop — `row.title_variants?.data` — which will surface as type errors where the old flat shape was assumed.
+
+- Updated dependencies
+  - @pylo/core@0.4.2
+
 ## 0.4.1
 
 ### Patch Changes

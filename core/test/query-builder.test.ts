@@ -30,7 +30,7 @@ describe("buildListQuery", () => {
     const { query } = buildListQuery("contact", {
       select: { title_variants: true },
     });
-    expect(norm(query)).toContain("title_variants { data { value variant } }");
+    expect(norm(query)).toContain("title_variants { data { value variant is_default } }");
   });
 
   it("emits a hasOne relation without a nested pagination block", () => {

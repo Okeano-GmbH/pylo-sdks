@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { analyzeEntities } from "../src/codegen/analyze.js";
 import type { RawEntity } from "../src/codegen/fetch-schema.js";
-import { generateIndexFile } from "../src/codegen/generate.js";
+import {
+  generateEntitiesFile,
+  generateIndexFile,
+} from "../src/codegen/generate.js";
 
 const field = (name: string, data_type = "TEXT", validation_string = "optional") => ({
   name,
@@ -437,5 +440,49 @@ describe("generateIndexFile — system entities", () => {
     expect(out()).toContain("export interface UpdatePyloUserInput {");
     expect(block()).toContain("createInput: CreatePyloUserInput;");
     expect(block()).toContain("updateInput: UpdatePyloUserInput;");
+  });
+});
+
+// A field with variants is read through a `data` envelope: the query builder
+// selects it as `<field>_variants { data { value variant is_default } }`, so
+// the payload is `{ data: [...] }` — the same wrapper relations use — not a bare
+// list, and each row carries the `is_default` fallback flag. Writes are the
+// other way round: the input takes the list itself, without `is_default`.
+describe("generateIndexFile — variant fields", () => {
+  const variantContact: RawEntity = {
+    ...contact,
+    entity_fields: {
+      data: [
+        field("id", "TEXT", "required"),
+        {
+          ...field("title"),
+          variant_entity_field: { data: { name: "Language" } },
+        },
+      ],
+    },
+  } as unknown as RawEntity;
+
+  const out = generateIndexFile(analyzeEntities([variantContact]), "@pylo/node");
+
+  it("types the read field as a data envelope around the variant list", () => {
+    expect(out).toContain(
+      "title_variants: { data: { variant: string; value: string; is_default: boolean }[] } | null;",
+    );
+  });
+
+  it("keeps the write field a bare list", () => {
+    expect(out).toContain(
+      "title_variants?: { variant: string; value: string }[];",
+    );
+  });
+
+  it("emits the same envelope in the entities file", () => {
+    const entitiesFile = generateEntitiesFile(
+      analyzeEntities([variantContact]),
+      "@pylo/node",
+    );
+    expect(entitiesFile).toContain(
+      "title_variants: { data: { variant: string; value: string; is_default: boolean }[] } | null;",
+    );
   });
 });

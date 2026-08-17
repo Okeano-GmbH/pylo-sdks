@@ -2,6 +2,13 @@ import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
 
 const VARIANT_TYPE = "{ variant: string; value: string }";
 
+// Reads come back enveloped, and carry one field writes don't: the query builder
+// selects a variant field as `field { data { value variant is_default } }`, so
+// the payload is a `data` wrapper — the same shape relations use — around rows
+// that also flag the fallback variant. Writes take the bare list.
+const VARIANT_RESULT_ITEM = "{ variant: string; value: string; is_default: boolean }";
+const VARIANT_RESULT_TYPE = `{ data: ${VARIANT_RESULT_ITEM}[] } | null`;
+
 // Packages that expose an augmentable `PyloRegister` — when codegen targets one
 // of these (via `importSource`), the generated index registers the schema so
 // the `pylo` client and the `PyloSelect` / `PyloResult` helpers are typed with
@@ -70,7 +77,7 @@ function generateReplaceVarsField(
 function generateEntityFieldsType(entity: AnalyzedEntity): string {
   const lines = entity.fields.map((f) => `${f.name}: ${fieldTypeString(f)};`);
   for (const variantName of getVariantFieldNames(entity)) {
-    lines.push(`${variantName}: ${VARIANT_TYPE}[] | null;`);
+    lines.push(`${variantName}: ${VARIANT_RESULT_TYPE};`);
   }
   return lines.join("\n");
 }
@@ -308,7 +315,7 @@ export function generateEntitiesFile(
       lines.push(`  ${field.name}: ${fieldTypeString(field)};`);
     }
     for (const variantName of getVariantFieldNames(entity)) {
-      lines.push(`  ${variantName}: ${VARIANT_TYPE}[] | null;`);
+      lines.push(`  ${variantName}: ${VARIANT_RESULT_TYPE};`);
     }
     for (const rel of entity.relations) {
       if (rel.type === "hasOne") {

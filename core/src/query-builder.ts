@@ -23,8 +23,11 @@ interface SelectObject {
 }
 
 // Variant fields are codegen-named with this suffix and must be queried as
-// `field { data { value variant } }` rather than as a bare scalar.
+// `field { data { value variant is_default } }` rather than as a bare scalar.
+// `is_default` marks the variant the field falls back to, so it is part of the
+// selection rather than something callers have to reach for separately.
 const VARIANT_SUFFIX = "_variants";
+const VARIANT_SELECTION = "{ data { value variant is_default } }";
 
 // Runtime option types — accept `unknown` since type safety is at the SDK layer
 interface ListOptionsInput {
@@ -49,7 +52,8 @@ const PAGINATION_FIELDS = `pagination {
 // conventions instead of schema metadata:
 //   - `key: true`              → a scalar field, or a variant field when the
 //                                key ends in `_variants` (emitted with its
-//                                `{ data { value variant } }` sub-selection).
+//                                `{ data { value variant is_default } }`
+//                                sub-selection).
 //   - `key: { select, … }`     → a relation; emitted as `key { data { … } }`,
 //                                with a `pagination { … }` block only when a
 //                                `pagination` key is supplied (opt-in, so the
@@ -65,7 +69,7 @@ function buildSelectionSet(
   for (const [key, value] of Object.entries(select)) {
     if (value === true) {
       if (key.endsWith(VARIANT_SUFFIX)) {
-        fields.push(`${key} { data { value variant } }`);
+        fields.push(`${key} ${VARIANT_SELECTION}`);
       } else {
         fields.push(key);
       }
