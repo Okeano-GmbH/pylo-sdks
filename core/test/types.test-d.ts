@@ -1,5 +1,9 @@
 import { describe, it, expectTypeOf } from "vitest";
-import type { EntitySelect, EntityResult, UpsertInput } from "../src/types.js";
+import type {
+  EntitySelect,
+  EntityResult,
+  UpsertInput,
+} from "../src/types.js";
 import type { EntityClient, PyloClient } from "../src/client.js";
 import type { FilterInput, PaginationData } from "../src/shared-types.js";
 
@@ -325,5 +329,274 @@ describe("virtual entities", () => {
       select: { authenticaton_method: true },
       headers: { "x-trace": "1" },
     });
+  });
+});
+
+// Relation nesting depth.
+//
+// `EntitySelect` recurses only in a mapped type's property-type position, and
+// `EntityResult` recurses over `keyof Select & keyof EntityRelations` — i.e.
+// driven by the finite select object. Both are lazily evaluated, so neither
+// needs a manual recursion counter. A `Depth`/`Increment` tuple used to cap this
+// at 4 usable hops (the 5th hop's `select` collapsed to `Record<string, never>`)
+// even though the runtime query builder has always been unbounded. These lock in
+// that nesting is unbounded *and* still fully checked at the leaf — a regression
+// would either reject the literal or widen the leaf to `Record<string, unknown>`.
+
+// Self-referential and mutually recursive relations: the shapes that make an
+// uncapped `EntitySelect` look risky, and that real Pylo schemas actually have.
+interface DeepSchema {
+  node: {
+    fields: { id: string; name: string };
+    relations: {
+      child: { type: "hasOne"; entity: "node" };
+      kids: { type: "hasMany"; entity: "node" };
+    };
+    updateInput: { id?: string; name?: string };
+  };
+  person: {
+    fields: { id: string; email: string };
+    relations: { employer: { type: "hasOne"; entity: "org" } };
+    updateInput: { id?: string; email?: string };
+  };
+  org: {
+    fields: { id: string; title: string };
+    relations: { staff: { type: "hasMany"; entity: "person" } };
+    updateInput: { id?: string; title?: string };
+  };
+}
+
+// Unwrap one relation hop of a result: `{ k: { data: … } | null }`.
+type HopOne<R> = NonNullable<R> extends { child: infer C }
+  ? NonNullable<C> extends { data: infer D }
+    ? D
+    : never
+  : never;
+type HopMany<R> = NonNullable<R> extends { kids: infer C }
+  ? C extends { data: Array<infer D> }
+    ? D
+    : never
+  : never;
+
+describe("relation nesting depth", () => {
+  const nodes = {} as EntityClient<DeepSchema, "node">;
+  const people = {} as EntityClient<DeepSchema, "person">;
+
+  it("types the leaf of a 10-hop hasOne chain", async () => {
+    const r = await nodes.byId("1", {
+      select: {
+        child: {
+          select: {
+            child: {
+              select: {
+                child: {
+                  select: {
+                    child: {
+                      select: {
+                        child: {
+                          select: {
+                            child: {
+                              select: {
+                                child: {
+                                  select: {
+                                    child: {
+                                      select: {
+                                        child: {
+                                          select: {
+                                            child: {
+                                              select: {
+                                                name: true,
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expectTypeOf<
+      HopOne<HopOne<HopOne<HopOne<HopOne<HopOne<HopOne<HopOne<HopOne<HopOne<typeof r>>>>>>>>>>
+    >().toEqualTypeOf<{ name: string }>();
+  });
+
+  it("rejects an unknown field at the leaf of a 10-hop chain", async () => {
+    void nodes.byId("1", {
+      select: {
+        child: {
+          select: {
+            child: {
+              select: {
+                child: {
+                  select: {
+                    child: {
+                      select: {
+                        child: {
+                          select: {
+                            child: {
+                              select: {
+                                child: {
+                                  select: {
+                                    child: {
+                                      select: {
+                                        child: {
+                                          select: {
+                                            child: {
+                                              select: {
+                                                // @ts-expect-error — `nope` is not a field on `node`, even 10 hops down
+                                                nope: true,
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("rejects a relation used without an explicit select 10 hops down", async () => {
+    void nodes.byId("1", {
+      select: {
+        child: {
+          select: {
+            child: {
+              select: {
+                child: {
+                  select: {
+                    child: {
+                      select: {
+                        child: {
+                          select: {
+                            child: {
+                              select: {
+                                child: {
+                                  select: {
+                                    child: {
+                                      select: {
+                                        child: {
+                                          select: {
+                                            child: {
+                                              select: {
+                                                // @ts-expect-error — relations are never `true`; they need `{ select }`
+                                                child: true,
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("types the leaf of an 8-hop hasMany chain", async () => {
+    const r = await nodes.byId("1", {
+      select: {
+        kids: {
+          select: {
+            kids: {
+              select: {
+                kids: {
+                  select: {
+                    kids: {
+                      select: {
+                        kids: {
+                          select: {
+                            kids: {
+                              select: {
+                                kids: {
+                                  select: {
+                                    kids: {
+                                      select: {
+                                        name: true,
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expectTypeOf<
+      HopMany<HopMany<HopMany<HopMany<HopMany<HopMany<HopMany<HopMany<typeof r>>>>>>>>
+    >().toEqualTypeOf<{ name: string }>();
+  });
+
+  it("keeps pagination opt-in at depth", async () => {
+    const withPagination = await nodes.byId("1", {
+      select: { kids: { select: { kids: { select: { name: true }, pagination: { page: 1 } } } } },
+    });
+    expectTypeOf<HopMany<typeof withPagination>>().toEqualTypeOf<{
+      kids: { data: Array<{ name: string }> } & { pagination: PaginationData };
+    }>();
+
+    const withoutPagination = await nodes.byId("1", {
+      select: { kids: { select: { kids: { select: { name: true } } } } },
+    });
+    expectTypeOf<HopMany<typeof withoutPagination>>().toEqualTypeOf<{
+      kids: { data: Array<{ name: string }> };
+    }>();
+  });
+
+  it("follows a mutually recursive cycle (person -> org -> person) 8 hops deep", async () => {
+    const r = await people.byId("1", { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { email: true } } } } } } } } } } } } } } } } } });
+    expectTypeOf(r).not.toBeNever();
+  });
+
+  it("rejects an unknown field at the leaf of a mutually recursive cycle", async () => {
+    // @ts-expect-error — `nope` is not a field on `org`
+    void people.byId("1", { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { employer: { select: { staff: { select: { nope: true } } } } } } } } } } } } } } } } } });
   });
 });

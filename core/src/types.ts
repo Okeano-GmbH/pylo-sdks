@@ -61,42 +61,33 @@ type OmitNever<T> = {
 // Scalar fields → `true`
 // hasOne relations → `{ select, filter? }`
 // hasMany relations → `{ select, filter?, pagination? }`
-export type EntitySelect<
-  S,
-  E extends EntityName<S>,
-  Depth extends number = 0,
-> = Depth extends 5
-  ? Record<string, never>
-  : OmitNever<{
-      [K in keyof EntityFields<S, E>]?: true;
-    }> &
-      {
-        [K in keyof EntityRelations<S, E>]?: EntityRelations<
-          S,
-          E
-        >[K] extends { type: "hasOne"; entity: infer Target }
-          ? Target extends EntityName<S>
-            ? {
-                select: EntitySelect<S, Target, Increment[Depth]>;
-                filter?: FilterInput;
-              }
-            : never
-          : EntityRelations<S, E>[K] extends {
-                type: "hasMany";
-                entity: infer Target;
-              }
-            ? Target extends EntityName<S>
-              ? {
-                  select: EntitySelect<S, Target, Increment[Depth]>;
-                  filter?: FilterInput;
-                  pagination?: PaginationInput;
-                }
-              : never
-            : never;
-      };
-
-// Depth increment helper (0→1, 1→2, ..., 4→5)
-type Increment = [1, 2, 3, 4, 5, 5];
+export type EntitySelect<S, E extends EntityName<S>> = OmitNever<{
+  [K in keyof EntityFields<S, E>]?: true;
+}> &
+  {
+    [K in keyof EntityRelations<S, E>]?: EntityRelations<
+      S,
+      E
+    >[K] extends { type: "hasOne"; entity: infer Target }
+      ? Target extends EntityName<S>
+        ? {
+            select: EntitySelect<S, Target>;
+            filter?: FilterInput;
+          }
+        : never
+      : EntityRelations<S, E>[K] extends {
+            type: "hasMany";
+            entity: infer Target;
+          }
+        ? Target extends EntityName<S>
+          ? {
+              select: EntitySelect<S, Target>;
+              filter?: FilterInput;
+              pagination?: PaginationInput;
+            }
+          : never
+        : never;
+  };
 
 // Compute return type from a select object.
 // - Scalar field with `true` → field's type from schema
@@ -107,14 +98,9 @@ export type EntityResult<
   S,
   E extends EntityName<S>,
   Select extends EntitySelect<S, E>,
-  Depth extends number = 0,
-> = Depth extends 5
-  ? Record<string, unknown>
-  : Select extends EntitySelect<S, E>
-    ? OmitNever<
-        ScalarResult<S, E, Select> & RelationResult<S, E, Select, Depth>
-      >
-    : EntityFields<S, E>;
+> = Select extends EntitySelect<S, E>
+  ? OmitNever<ScalarResult<S, E, Select> & RelationResult<S, E, Select>>
+  : EntityFields<S, E>;
 
 // Compute scalar fields from select
 type ScalarResult<
@@ -135,7 +121,6 @@ type RelationResult<
   S,
   E extends EntityName<S>,
   Select extends EntitySelect<S, E>,
-  Depth extends number = 0,
 > = {
   [K in keyof Select &
     keyof EntityRelations<S, E>]: EntityRelations<S, E>[K] extends {
@@ -146,12 +131,7 @@ type RelationResult<
       ? Select[K] extends { select: infer SubSelect }
         ? SubSelect extends EntitySelect<S, Target>
           ? {
-              data: EntityResult<
-                S,
-                Target,
-                SubSelect,
-                Increment[Depth]
-              >;
+              data: EntityResult<S, Target, SubSelect>;
             } | null
           : never
         : never
@@ -164,14 +144,7 @@ type RelationResult<
         ? Select[K] extends { select: infer SubSelect }
           ? SubSelect extends EntitySelect<S, Target>
             ? {
-                data: Array<
-                  EntityResult<
-                    S,
-                    Target,
-                    SubSelect,
-                    Increment[Depth]
-                  >
-                >;
+                data: Array<EntityResult<S, Target, SubSelect>>;
               } & (Select[K] extends { pagination: unknown }
                 ? { pagination: PaginationData }
                 : unknown)
