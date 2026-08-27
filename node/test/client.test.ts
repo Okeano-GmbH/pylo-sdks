@@ -210,3 +210,53 @@ describe("pylo — injected flow client", () => {
     );
   });
 });
+
+describe("createPyloNode — bearer token", () => {
+  it("authenticates with a bearer token, not an api key", async () => {
+    const client = createPyloNode<TestSchema>({ token: "access-token" });
+    await client.contact.list({ select: { id: true } });
+
+    const [, , , options] = call();
+    expect(options).toMatchObject({ token: "access-token" });
+    expect(options.apiKey).toBeUndefined();
+  });
+
+  it("resolves a token getter per request so refreshes are picked up", async () => {
+    let current = "t1";
+    const client = createPyloNode<TestSchema>({ token: () => current });
+
+    await client.contact.list({ select: { id: true } });
+    current = "t2";
+    await client.contact.list({ select: { id: true } });
+
+    expect(graphqlRequest.mock.calls[0]![3].token).toBe("t1");
+    expect(graphqlRequest.mock.calls[1]![3].token).toBe("t2");
+  });
+
+  it("awaits an async token getter", async () => {
+    const client = createPyloNode<TestSchema>({
+      token: async () => "async-token",
+    });
+    await client.contact.list({ select: { id: true } });
+
+    expect(call()[3].token).toBe("async-token");
+  });
+
+  it("still sends client-level headers alongside a token", async () => {
+    const client = createPyloNode<TestSchema>({
+      token: "t",
+      headers: { "x-tenant": "acme" },
+    });
+    await client.contact.list({ select: { id: true } });
+
+    expect(call()[3].headers).toMatchObject({ "x-tenant": "acme" });
+  });
+});
+
+describe("createPyloNode — missing credentials", () => {
+  it("throws when neither an api key nor a token is given", () => {
+    expect(() =>
+      createPyloNode<TestSchema>({} as unknown as { apiKey: string }),
+    ).toThrow(/requires either `apiKey` or `token`/);
+  });
+});

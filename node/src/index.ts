@@ -1,21 +1,44 @@
-import { createPyloClient } from "@pylo/core";
+import { createPyloClient, PyloError } from "@pylo/core";
 import type {
+  AuthProvider,
   PyloClient,
   EntityName,
   EntitySelect,
   EntityResult,
 } from "@pylo/core";
 
-interface NodeClientOptions {
-  apiKey: string;
+type TokenSource = string | (() => string | Promise<string>);
+
+type NodeClientCredentials =
+  | { apiKey: string; token?: never }
+  | { token: TokenSource; apiKey?: never };
+
+type NodeClientOptions = NodeClientCredentials & {
   endpoint?: string;
   headers?: Record<string, string>;
+};
+
+// A JS caller can bypass the union, so the credential is checked at runtime too.
+function resolveAuth(options: NodeClientOptions): AuthProvider {
+  const token: TokenSource | undefined = options.token;
+  if (token !== undefined) {
+    return async () => ({
+      token: typeof token === "function" ? await token() : token,
+    });
+  }
+
+  const apiKey: string | undefined = options.apiKey;
+  if (apiKey !== undefined) {
+    return async () => ({ apiKey });
+  }
+
+  throw new PyloError("createPyloNode requires either `apiKey` or `token`");
 }
 
 export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
   return createPyloClient<S>({
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
-    auth: async () => ({ apiKey: options.apiKey }),
+    auth: resolveAuth(options),
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
   });
 }

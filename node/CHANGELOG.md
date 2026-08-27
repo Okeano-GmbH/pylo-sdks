@@ -1,5 +1,11 @@
 # @pylo/node
 
+## 0.4.4
+
+### Patch Changes
+
+- 7e86a67: feat: adds option to use token for auth in node sdk
+
 ## 0.4.3
 
 ### Patch Changes
