@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.4.4
+
+### Patch Changes
+
+- fix: fix codegen ´
+- Updated dependencies
+  - @pylo/core@0.4.4
+
 ## 0.4.3
 
 ### Patch Changes

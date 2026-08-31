@@ -44,6 +44,26 @@ describe("fetchSchemaWith", () => {
     expect(ENTITY_LIST_QUERY).toContain("is_virtual");
   });
 
+  // They landed on the `Entity` type in one release, so an instance that has
+  // one has all of them — asking for a subset would gain nothing.
+  it("asks for the capability flags in the same breath", () => {
+    for (const flag of [
+      "can_list",
+      "can_get_by_id",
+      "can_create",
+      "can_update",
+      "can_bulk_update",
+      "can_delete",
+    ]) {
+      expect(ENTITY_LIST_QUERY).toContain(flag);
+    }
+  });
+
+  it("asks for the field-level access flags", () => {
+    expect(ENTITY_LIST_QUERY).toContain("is_readable");
+    expect(ENTITY_LIST_QUERY).toContain("is_writeable");
+  });
+
   it("pages through every entity with the one query", async () => {
     const { queries, request } = recorder((_query, pageNumber) =>
       page([entity(`Entity${pageNumber}`)], pageNumber < 3),

@@ -1,5 +1,11 @@
 # @pylo/core
 
+## 0.4.4
+
+### Patch Changes
+
+- fix: fix codegen ´
+
 ## 0.4.3
 
 ### Patch Changes
