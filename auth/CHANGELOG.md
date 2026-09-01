@@ -1,5 +1,11 @@
 # @pylo/auth
 
+## 0.0.6
+
+### Patch Changes
+
+- fix: better error parsing and token refreshing periods
+
 ## 0.0.5
 
 ### Patch Changes

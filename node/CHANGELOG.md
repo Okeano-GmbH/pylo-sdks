@@ -1,5 +1,13 @@
 # @pylo/node
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @pylo/auth@0.0.6
+  - @pylo/core@0.4.5
+
 ## 0.4.5
 
 ### Patch Changes

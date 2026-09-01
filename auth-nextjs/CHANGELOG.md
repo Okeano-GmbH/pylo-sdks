@@ -1,5 +1,13 @@
 # @pylo/auth-nextjs
 
+## 0.1.7
+
+### Patch Changes
+
+- fix: better error parsing and token refreshing periods
+- Updated dependencies
+  - @pylo/auth@0.0.6
+
 ## 0.1.6
 
 ### Patch Changes

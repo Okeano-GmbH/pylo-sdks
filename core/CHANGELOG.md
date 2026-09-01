@@ -1,5 +1,13 @@
 # @pylo/core
 
+## 0.4.5
+
+### Patch Changes
+
+- fix: better error parsing and token refreshing periods
+- Updated dependencies
+  - @pylo/auth@0.0.6
+
 ## 0.4.4
 
 ### Patch Changes
