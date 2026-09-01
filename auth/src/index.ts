@@ -9,6 +9,7 @@ export type {
   GraphQLResponse,
   GraphQLError,
   CustomGraphQLError,
+  PyloErrorCode,
   LoginResponse,
   RefreshTokenResponse,
   MeResponse,
@@ -21,6 +22,8 @@ export { decodeToken, isTokenExpired } from "./token.js";
 export {
   DEFAULT_GRAPHQL_ENDPOINT,
   extractErrorMessage,
+  extractErrorCode,
+  extractHttpStatus,
   hasErrors,
   isUnauthorizedError,
   graphqlRequest,

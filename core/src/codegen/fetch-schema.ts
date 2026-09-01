@@ -1,28 +1,6 @@
+import { graphqlRequest } from "@pylo/auth";
 import type { GraphQLResponse } from "@pylo/auth";
 import type { ResolvedPyloConfig } from "./config.js";
-
-async function graphqlRequestWithApiKey<T>(
-  endpoint: string,
-  query: string,
-  variables?: Record<string, unknown>,
-  apiKey?: string,
-): Promise<GraphQLResponse<T>> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (apiKey) {
-    headers["pylo-api-key"] = apiKey;
-  }
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-
-  return response.json() as Promise<GraphQLResponse<T>>;
-}
 
 export const ENTITY_LIST_QUERY = `
 query PyloSchemaFetch($pagination: PaginationInput) {
@@ -221,6 +199,6 @@ export async function fetchSchemaWith(request: SchemaFetcher): Promise<RawEntity
 
 export async function fetchSchema(config: ResolvedPyloConfig): Promise<RawEntity[]> {
   return fetchSchemaWith((query, variables) =>
-    graphqlRequestWithApiKey(config.endpoint, query, variables, config.apiKey),
+    graphqlRequest(config.endpoint, query, variables, { apiKey: config.apiKey }),
   );
 }

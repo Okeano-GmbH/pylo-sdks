@@ -72,11 +72,27 @@ export interface GraphQLResponse<T> {
 }
 
 /**
+ * Error codes the API sets on `extensions.code`. `NETWORK_ERROR` is the one the
+ * SDK synthesizes itself, for a response that never reached the API intact.
+ */
+export type PyloErrorCode =
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "VALIDATION_ERROR"
+  | "NOT_FOUND"
+  | "GRAPHQL_PARSE_FAILED"
+  | "GRAPHQL_VALIDATION_FAILED"
+  | "DATABASE_ERROR"
+  | "INTERNAL_SERVER_ERROR"
+  | "NETWORK_ERROR";
+
+/**
  * Standard GraphQL error
  */
 export interface GraphQLError {
   message: string;
-  extensions?: { code?: string };
+  /** `httpStatus` is present only on errors the SDK synthesized from the response status. */
+  extensions?: { code?: PyloErrorCode | string; httpStatus?: number };
 }
 
 /**
@@ -85,7 +101,7 @@ export interface GraphQLError {
 export interface CustomGraphQLError {
   referenceId?: string;
   generalError?: {
-    errorCode?: string;
+    errorCode?: PyloErrorCode | string;
     message?: string;
   };
 }

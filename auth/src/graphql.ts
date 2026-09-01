@@ -2,6 +2,7 @@ import type {
   GraphQLResponse,
   GraphQLError,
   CustomGraphQLError,
+  PyloErrorCode,
 } from "./types.js";
 
 export const DEFAULT_GRAPHQL_ENDPOINT = "https://api.pyloapp.com/graphql";
@@ -23,6 +24,38 @@ export function extractErrorMessage(
   }
 
   return null;
+}
+
+/**
+ * Extract the API's error classification (`extensions.code`) from a response's
+ * errors. The API sets this for every error it raises, which is more reliable
+ * than matching on the message text.
+ */
+export function extractErrorCode(
+  errors: GraphQLError[] | CustomGraphQLError | undefined
+): PyloErrorCode | string | null {
+  if (!errors) return null;
+
+  if (Array.isArray(errors)) {
+    return errors[0]?.extensions?.code ?? null;
+  }
+
+  if (typeof errors === "object" && "generalError" in errors) {
+    return errors.generalError?.errorCode ?? null;
+  }
+
+  return null;
+}
+
+/**
+ * The HTTP status behind an error, for the responses `graphqlRequest`
+ * synthesized itself. Absent on errors the API returned in its own envelope.
+ */
+export function extractHttpStatus(
+  errors: GraphQLError[] | CustomGraphQLError | undefined
+): number | null {
+  if (!Array.isArray(errors)) return null;
+  return errors[0]?.extensions?.httpStatus ?? null;
 }
 
 /**
@@ -53,6 +86,10 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
     "unauthenticated",
     "authenticationexception",
   ];
+
+  // A synthesized error carries no message to match on. Only 401 counts: a 403
+  // from a proxy in front of the API must not end the caller's session.
+  if (extractHttpStatus(errors) === 401) return true;
 
   if (Array.isArray(errors)) {
     return errors.some((e) => {
@@ -99,6 +136,21 @@ function stripProtectedHeaders(
   return result;
 }
 
+const MAX_BODY_EXCERPT = 200;
+
+const truncate = (body: string) =>
+  body.length <= MAX_BODY_EXCERPT ? body : `${body.slice(0, MAX_BODY_EXCERPT)}…`;
+
+function synthesizeError<T>(message: string, httpStatus: number): GraphQLResponse<T> {
+  const code: PyloErrorCode = ((): PyloErrorCode => {
+    if (httpStatus === 401) return "UNAUTHENTICATED";
+    if (httpStatus === 403) return "FORBIDDEN";
+    return "NETWORK_ERROR";
+  })();
+
+  return { errors: [{ message, extensions: { code, httpStatus } }] };
+}
+
 /**
  * Make a GraphQL request
  */
@@ -127,5 +179,34 @@ export async function graphqlRequest<T>(
     body: JSON.stringify({ query, variables }),
   });
 
-  return response.json() as Promise<GraphQLResponse<T>>;
+  const body = await response.text();
+
+  let parsed: GraphQLResponse<T> | undefined;
+  try {
+    parsed = JSON.parse(body) as GraphQLResponse<T>;
+  } catch {
+    parsed = undefined;
+  }
+
+  // The API answers every error with its own `errors` envelope, so anything
+  // unparseable came from in front of it (a proxy's HTML 502, a gateway
+  // timeout). Callers branch on `hasErrors`/`isUnauthorizedError`, so report it
+  // in the same shape rather than throwing past them.
+  if (parsed === undefined) {
+    return synthesizeError(
+      `Pylo returned a non-JSON response (HTTP ${response.status})${body === "" ? "" : `: ${truncate(body)}`}`,
+      response.status,
+    );
+  }
+
+  // A non-2xx with a well-formed envelope is the API reporting an error it
+  // classified itself (401 UNAUTHENTICATED, for one) — leave it as it is.
+  if (!response.ok && !hasErrors(parsed)) {
+    return synthesizeError(
+      `Pylo request failed (HTTP ${response.status})${body === "" ? "" : `: ${truncate(body)}`}`,
+      response.status,
+    );
+  }
+
+  return parsed;
 }

@@ -3,7 +3,14 @@ import {
   DEFAULT_GRAPHQL_ENDPOINT,
   hasErrors,
   extractErrorMessage,
+  extractErrorCode,
+  extractHttpStatus,
   mergeHeaders,
+} from "@pylo/auth";
+import type {
+  GraphQLError,
+  CustomGraphQLError,
+  PyloErrorCode,
 } from "@pylo/auth";
 import {
   buildListQuery,
@@ -86,12 +93,24 @@ export function flagsToHeaders(flags: {
 }
 
 export class PyloError extends Error {
-  graphqlErrors: unknown;
+  /**
+   * The API's own classification of the failure, from `extensions.code`. Match
+   * on this rather than on `message`, which is human-facing and unstable.
+   */
+  code: PyloErrorCode | string | null;
+  /** Set only when the SDK synthesized the error from the HTTP status. */
+  httpStatus: number | null;
+  graphqlErrors: GraphQLError[] | CustomGraphQLError | undefined;
 
-  constructor(message: string, graphqlErrors?: unknown) {
+  constructor(
+    message: string,
+    graphqlErrors?: GraphQLError[] | CustomGraphQLError,
+  ) {
     super(message);
     this.name = "PyloError";
     this.graphqlErrors = graphqlErrors;
+    this.code = extractErrorCode(graphqlErrors);
+    this.httpStatus = extractHttpStatus(graphqlErrors);
   }
 }
 
