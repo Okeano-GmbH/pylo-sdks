@@ -6,6 +6,7 @@ export type {
   AuthResult,
   AuthError,
   TokenPayload,
+  ShouldRefreshTokenOptions,
   GraphQLResponse,
   GraphQLError,
   CustomGraphQLError,
@@ -16,7 +17,7 @@ export type {
 } from "./types.js";
 
 // Token utilities
-export { decodeToken, isTokenExpired } from "./token.js";
+export { decodeToken, isTokenExpired, shouldRefreshToken } from "./token.js";
 
 // GraphQL utilities
 export {

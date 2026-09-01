@@ -54,6 +54,16 @@ export interface AuthError {
 }
 
 /**
+ * Options for shouldRefreshToken
+ */
+export interface ShouldRefreshTokenOptions {
+  /** Share of the token's lifetime that must elapse before it is refreshed. Default: 0.75 */
+  elapsedFraction?: number;
+  /** Lower bound on the buffer, used when the token carries no `iat`. Default: 10 */
+  minBufferSeconds?: number;
+}
+
+/**
  * JWT token payload
  */
 export interface TokenPayload {

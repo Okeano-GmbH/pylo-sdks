@@ -2,6 +2,7 @@ import { NextResponse } from "next/server.js";
 import type { NextRequest } from "next/server.js";
 import {
   isTokenExpired,
+  shouldRefreshToken,
   graphqlRequest,
   isUnauthorizedError,
   extractErrorMessage,
@@ -120,6 +121,7 @@ export async function pyloAuth(
   const graphqlEndpoint = options?.graphqlEndpoint ?? process.env.PYLO_GRAPHQL_ENDPOINT ?? DEFAULT_GRAPHQL_ENDPOINT;
   const cookieOptions = options?.cookies;
   const publicPaths = options?.publicPaths ?? ["/auth"];
+  const tokenRefreshBuffer = options?.tokenRefreshBuffer;
   const { pathname } = request.nextUrl;
 
   const authTokenCookieName = getAuthTokenCookieName();
@@ -170,9 +172,14 @@ export async function pyloAuth(
     return { user: null, loggedIn: false, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
   }
 
-  // Check if token is expired or will expire within 10 seconds
-  // Note: buffer must be shorter than token lifetime (currently ~30s)
-  const isExpired = !authToken || isTokenExpired(authToken, 10);
+  // Refresh while the token still has life left: that remainder is the window in
+  // which a failed refresh gets retried on each following request, so an API that
+  // is briefly unreachable (a deploy, say) costs a retry rather than the session.
+  const isExpired =
+    !authToken ||
+    (tokenRefreshBuffer === undefined
+      ? shouldRefreshToken(authToken)
+      : isTokenExpired(authToken, tokenRefreshBuffer));
 
   // Store refresh result to avoid duplicate calls
   let refreshResult: RefreshOutcome | null = null;
