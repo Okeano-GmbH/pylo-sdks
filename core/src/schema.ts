@@ -13,7 +13,23 @@ export type {
   RawEntityRelation,
   EntityListResponse,
 } from "./codegen/fetch-schema.js";
+export {
+  DOCUMENT_TEMPLATE_LIST_QUERY,
+  fetchDocumentTemplatesWith,
+} from "./codegen/fetch-templates.js";
+export type {
+  RawDocumentTemplate,
+  DocumentTemplateListResponse,
+} from "./codegen/fetch-templates.js";
 export { analyzeEntities } from "./codegen/analyze.js";
+export { analyzeDocumentTemplates } from "./codegen/analyze-templates.js";
+export type {
+  AnalyzedDocumentTemplate,
+  TemplateInput,
+  TemplateListItem,
+  TemplateObjectField,
+  TemplateValueType,
+} from "./codegen/analyze-templates.js";
 export type {
   AnalyzedEntity,
   AnalyzedField,
@@ -22,4 +38,6 @@ export type {
 export {
   generateIndexFile,
   generateEntitiesFile,
+  generateDocumentTemplatesType,
+  generateDocumentRefTypes,
 } from "./codegen/generate.js";

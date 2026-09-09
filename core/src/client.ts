@@ -45,6 +45,13 @@ import type {
   CreateUploadInput,
   PyloUploadedFile,
 } from "./upload.js";
+import { buildGenerateDocumentMutation } from "./documents.js";
+import type {
+  DocumentGenerateOptions,
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  PyloRenderedDocument,
+} from "./documents.js";
 import type {
   AggregateResult,
   EventAggregateOptions,
@@ -237,7 +244,30 @@ export type Me<S> = "me" extends EntityName<S>
   : never;
 
 // Keys the client reserves for itself. They shadow any entity of the same name.
-type ReservedClientKey = "ingestEvents" | "events" | "me" | "files";
+type ReservedClientKey = "ingestEvents" | "events" | "me" | "files" | "documents";
+
+// Renders the tenant's document templates. Exposed as `client.documents`, a
+// reserved key that shadows any entity of the same name.
+//
+// `T` is the generated template map — template key to the variables that
+// template declares. Without a generated one it falls back to
+// `DocumentTemplateMap`, which accepts any key and any variables.
+export interface DocumentsClient<T> {
+  // Renders `template`, stores the PDF, and resolves with the document row —
+  // `media_id` is the file, for `files.getDownloadUrl`. Rendering is
+  // synchronous, so a template the renderer chokes on rejects rather than
+  // returning a failed row.
+  //
+  // The variables are checked against the template's own inputs: an entity
+  // input takes the record's id, or an object that identifies one (`id` or
+  // `__search_value`) whose other keys override the fetched fields for this
+  // render.
+  generate<K extends DocumentTemplateName<T>>(
+    template: K,
+    variables: T[K],
+    options?: DocumentGenerateOptions & MutationRequestOptions,
+  ): Promise<PyloRenderedDocument>;
+}
 
 // File upload/download. Pylo uploads are a two-step uploadUrl flow: `createUpload`
 // returns `{ id, url }` (id = the future pyloMedia id, url = an expiring Pylo
@@ -268,13 +298,14 @@ export interface FilesClient<S> {
 // none left — a read-only report, say — still aggregates, since
 // `entityInstanceAggregate` is keyed by entity name rather than generated per
 // entity. `me` and the other reserved keys are excluded and defined below.
-export type PyloClient<S> = {
+export type PyloClient<S, T = DocumentTemplateMap> = {
   [E in Exclude<EntityName<S>, ReservedClientKey>]: EntityClient<S, E>;
 } & {
   ingestEvents: IngestEvents;
   events: EventsClient;
   me: Me<S>;
   files: FilesClient<S>;
+  documents: DocumentsClient<T>;
 };
 
 function getEndpoint(endpoint?: string): string {
@@ -812,7 +843,43 @@ function createFilesClient<S>(
   };
 }
 
-export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
+function createDocumentsClient<T>(
+  endpoint: string,
+  auth: AuthProvider,
+  globalHeaders?: Record<string, string>,
+): DocumentsClient<T> {
+  return {
+    async generate(template, variables, options) {
+      const { query, variables: gqlVariables } = buildGenerateDocumentMutation(
+        template,
+        variables,
+        options,
+      );
+
+      const data = await executeGraphQL<Record<string, PyloRenderedDocument | null>>(
+        endpoint,
+        query,
+        gqlVariables,
+        auth,
+        mergeHeaders(
+          mergeHeaders(globalHeaders, options?.headers),
+          flagsToHeaders(options ?? {}),
+        ),
+      );
+
+      const result = data["generateDocument"];
+      if (!result) {
+        throw new PyloError("Unexpected response shape — missing generateDocument");
+      }
+
+      return result;
+    },
+  };
+}
+
+export function createPyloClient<S, T = DocumentTemplateMap>(
+  options: ClientOptions,
+): PyloClient<S, T> {
   const endpoint = getEndpoint(options.endpoint);
   const auth = options.auth;
   const globalHeaders = options.headers;
@@ -821,14 +888,16 @@ export function createPyloClient<S>(options: ClientOptions): PyloClient<S> {
   const events = createEventsClient(endpoint, auth, globalHeaders);
   const me = createMe<S>(endpoint, auth, globalHeaders);
   const files = createFilesClient<S>(endpoint, auth, globalHeaders);
+  const documents = createDocumentsClient<T>(endpoint, auth, globalHeaders);
 
-  return new Proxy({} as PyloClient<S>, {
+  return new Proxy({} as PyloClient<S, T>, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
       if (prop === "ingestEvents") return ingestEvents;
       if (prop === "events") return events;
       if (prop === "me") return me;
       if (prop === "files") return files;
+      if (prop === "documents") return documents;
       return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, globalHeaders);
     },
   });

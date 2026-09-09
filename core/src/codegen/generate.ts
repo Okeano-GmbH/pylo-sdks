@@ -1,5 +1,11 @@
 import { ENTITY_CAPABILITY_NAMES } from "./analyze.js";
 import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
+import type {
+  AnalyzedDocumentTemplate,
+  TemplateInput,
+  TemplateObjectField,
+  TemplateValueType,
+} from "./analyze-templates.js";
 
 const VARIANT_TYPE = "{ variant: string; value: string }";
 
@@ -211,9 +217,153 @@ function collectEnumTypes(
   return Array.from(seen, ([typeName, values]) => ({ typeName, values }));
 }
 
+// A template variable of kind "value". `date`/`datetime` also take a `Date`:
+// the variables object is JSON-serialized before it is sent, which turns one
+// into the ISO string the renderer expects.
+const VALUE_TYPE_MAP: Record<TemplateValueType, string> = {
+  text: "string",
+  number: "number",
+  boolean: "boolean",
+  date: "string | Date",
+  datetime: "string | Date",
+};
+
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function propertyKey(name: string): string {
+  return IDENTIFIER.test(name) ? name : `'${name.replace(/'/g, "\\'")}'`;
+}
+
+// What a template's `entity` input accepts: the record's id, or an object that
+// addresses one. This is not `<Entity>Input` — the renderer does not upsert.
+// It reads `id` / `__search_value` to fetch the record and treats every *other*
+// key as an override of the fetched fields for this render, so a relation key
+// or `__replace_vars` would silently land in the rendered output.
+//
+// An entity the schema no longer has (a template written against a renamed one)
+// falls back to the id alone rather than to a type that would not compile.
+function entityVariableType(
+  entityName: string,
+  entityPascalNames: Map<string, string>,
+): string {
+  const pascalName = entityPascalNames.get(entityName.toLowerCase());
+  if (!pascalName) return "string";
+  return `string | ${pascalName}DocumentRef`;
+}
+
+// The entities any template addresses, in schema order so the output is stable.
+function referencedEntities(
+  templates: AnalyzedDocumentTemplate[],
+  entities: AnalyzedEntity[],
+): AnalyzedEntity[] {
+  const referenced = new Set<string>();
+  for (const template of templates) {
+    for (const input of template.inputs) {
+      if (input.kind === "entity") referenced.add(input.entity.toLowerCase());
+      if (input.kind === "list" && input.item.kind === "entity") {
+        referenced.add(input.item.entity.toLowerCase());
+      }
+    }
+  }
+  return entities.filter((e) => referenced.has(e.pascalName.toLowerCase()));
+}
+
+// `__search_value` is narrower here than on an upsert input: the renderer reads
+// `field` and `value`, and raises when nothing matches. Overrides are typed
+// from the *readable* fields, since what they replace is what was fetched.
+export function generateDocumentRefTypes(
+  templates: AnalyzedDocumentTemplate[],
+  entities: AnalyzedEntity[],
+): string[] {
+  const lines: string[] = [];
+
+  for (const entity of referencedEntities(templates, entities)) {
+    lines.push(
+      "/**",
+      ` * Addresses the ${entity.pascalName} a document template renders: its id, or an`,
+      " * object that identifies one and overrides the fetched fields for that render.",
+      " */",
+      `export interface ${entity.pascalName}DocumentRef {`,
+      "  id?: string;",
+      "  __search_value?: { field: string; value?: string };",
+    );
+    for (const field of readableFields(entity)) {
+      if (field.name === "id") continue;
+      lines.push(`  ${field.name}?: ${fieldTypeString(field)};`);
+    }
+    lines.push("}", "");
+  }
+
+  return lines;
+}
+
+function objectVariableType(fields: TemplateObjectField[]): string {
+  if (fields.length === 0) return EMPTY_BLOCK;
+  const members = fields
+    .map((f) => `${propertyKey(f.name)}: ${VALUE_TYPE_MAP[f.type]}`)
+    .join("; ");
+  return `{ ${members} }`;
+}
+
+function templateInputType(
+  input: TemplateInput,
+  entityPascalNames: Map<string, string>,
+): string {
+  if (input.kind === "entity") {
+    return entityVariableType(input.entity, entityPascalNames);
+  }
+  if (input.kind === "value") {
+    return VALUE_TYPE_MAP[input.type];
+  }
+  const item =
+    input.item.kind === "entity"
+      ? entityVariableType(input.item.entity, entityPascalNames)
+      : objectVariableType(input.item.fields);
+  return `Array<${item}>`;
+}
+
+// The template key → variables map that `documents.generate` is checked against.
+// Keys are the template's `key` column, which is what the render endpoint takes.
+export function generateDocumentTemplatesType(
+  templates: AnalyzedDocumentTemplate[],
+  entities: AnalyzedEntity[],
+): string[] {
+  const entityPascalNames = new Map(
+    entities.map((e) => [e.pascalName.toLowerCase(), e.pascalName]),
+  );
+
+  const lines: string[] = ["export interface PyloDocumentTemplates {"];
+
+  for (const template of templates) {
+    const comment = template.description
+      ? `${template.name} — ${template.description}`
+      : template.name;
+    lines.push(`  /** ${comment.replace(/\*\//g, "*\\/")} */`);
+    // A template with no inputs renders from an empty variables object; `{}`
+    // would mean "any non-nullish value" instead.
+    if (template.inputs.length === 0) {
+      lines.push(`  ${propertyKey(template.key)}: ${EMPTY_BLOCK};`);
+      continue;
+    }
+    lines.push(`  ${propertyKey(template.key)}: {`);
+    for (const input of template.inputs) {
+      // An input the renderer can fill from its own default is optional here.
+      const optional = input.required && !input.hasDefault ? "" : "?";
+      lines.push(
+        `    ${propertyKey(input.name)}${optional}: ${templateInputType(input, entityPascalNames)};`,
+      );
+    }
+    lines.push("  };");
+  }
+
+  lines.push("}", "");
+  return lines;
+}
+
 export function generateIndexFile(
   entities: AnalyzedEntity[],
   importSource: string,
+  templates: AnalyzedDocumentTemplate[] = [],
 ): string {
   const lines: string[] = [];
 
@@ -318,6 +468,14 @@ export function generateIndexFile(
   }
   lines.push("}", "");
 
+  // Emitted only when the tenant has templates. An empty `PyloDocumentTemplates`
+  // would type every key as invalid, which is the wrong answer when the reason
+  // for the emptiness is a backend that has no template entity yet.
+  if (templates.length > 0) {
+    lines.push(...generateDocumentRefTypes(templates, entities));
+    lines.push(...generateDocumentTemplatesType(templates, entities));
+  }
+
   // Register the schema so the typed client and the PyloSelect/PyloResult
   // helpers pick it up automatically (no hand-written `declare module`).
   if (REGISTERABLE_SOURCES.has(importSource)) {
@@ -325,10 +483,11 @@ export function generateIndexFile(
       `declare module '${importSource}' {`,
       "  interface PyloRegister {",
       "    schema: PyloSchema;",
-      "  }",
-      "}",
-      "",
     );
+    if (templates.length > 0) {
+      lines.push("    documentTemplates: PyloDocumentTemplates;");
+    }
+    lines.push("  }", "}", "");
   }
 
   return lines.join("\n");

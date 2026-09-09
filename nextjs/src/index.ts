@@ -2,6 +2,9 @@
 // Re-exports shared types, SDK types, and PyloError from @pylo/core
 
 import type {
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  DocumentVariables,
   EntityName,
   EntitySelect,
   EntityResult,
@@ -72,6 +75,13 @@ export type {
   AggregateOptions,
   EntityAggregateApi,
   FilesClient,
+  DocumentsClient,
+  DocumentGenerateOptions,
+  DocumentPageOptions,
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  DocumentVariables,
+  PyloRenderedDocument,
   UploadUrl,
   UploadProgress,
   UploadSource,
@@ -90,7 +100,10 @@ export { PyloError } from "@pylo/core";
  * `PyloResult` helpers. Generated code augments it, e.g.:
  *
  *   declare module "@pylo/nextjs" {
- *     interface PyloRegister { schema: PyloSchema }
+ *     interface PyloRegister {
+ *       schema: PyloSchema
+ *       documentTemplates: PyloDocumentTemplates
+ *     }
  *   }
  *
  * With no augmentation the helpers fall back to an untyped (`any`) schema.
@@ -101,6 +114,24 @@ export interface PyloRegister {}
 export type RegisteredSchema = PyloRegister extends { schema: infer S }
   ? S
   : any;
+
+/**
+ * The generated document-template map, when codegen registered one. Without it
+ * `documents.generate` stays loosely typed rather than rejecting every key —
+ * a tenant whose backend has no templates yet must still be able to compile.
+ */
+export type RegisteredDocumentTemplates = PyloRegister extends {
+  documentTemplates: infer T;
+}
+  ? T
+  : DocumentTemplateMap;
+
+/** The `key` of a document template on the registered map. */
+export type PyloDocumentTemplate = DocumentTemplateName<RegisteredDocumentTemplates>;
+
+/** The variables one template renders with. */
+export type PyloDocumentVariables<K extends PyloDocumentTemplate> =
+  DocumentVariables<RegisteredDocumentTemplates, K>;
 
 /**
  * Entity keys available on the registered schema — e.g. `"contact"`. Use as the

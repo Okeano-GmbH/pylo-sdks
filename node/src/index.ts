@@ -2,6 +2,9 @@ import { createPyloClient, PyloError } from "@pylo/core";
 import type {
   AuthProvider,
   PyloClient,
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  DocumentVariables,
   EntityName,
   EntitySelect,
   EntityResult,
@@ -35,8 +38,10 @@ function resolveAuth(options: NodeClientOptions): AuthProvider {
   throw new PyloError("createPyloNode requires either `apiKey` or `token`");
 }
 
-export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
-  return createPyloClient<S>({
+export function createPyloNode<S, T = RegisteredDocumentTemplates>(
+  options: NodeClientOptions,
+): PyloClient<S, T> {
+  return createPyloClient<S, T>({
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
     auth: resolveAuth(options),
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
@@ -48,7 +53,10 @@ export function createPyloNode<S>(options: NodeClientOptions): PyloClient<S> {
  * `pylo` client. Generated code augments it, e.g.:
  *
  *   declare module "@pylo/node" {
- *     interface PyloRegister { schema: PyloSchema }
+ *     interface PyloRegister {
+ *       schema: PyloSchema
+ *       documentTemplates: PyloDocumentTemplates
+ *     }
  *   }
  *
  * With no augmentation the client falls back to an untyped (`any`) schema.
@@ -59,6 +67,30 @@ export interface PyloRegister {}
 export type RegisteredSchema = PyloRegister extends { schema: infer S }
   ? S
   : any;
+
+/**
+ * The generated document-template map, when codegen registered one. Without it
+ * `documents.generate` stays loosely typed rather than rejecting every key —
+ * a tenant whose backend has no templates yet must still be able to compile.
+ */
+export type RegisteredDocumentTemplates = PyloRegister extends {
+  documentTemplates: infer T;
+}
+  ? T
+  : DocumentTemplateMap;
+
+/** The `key` of a document template on the registered map. */
+export type PyloDocumentTemplate = DocumentTemplateName<RegisteredDocumentTemplates>;
+
+/**
+ * The variables one template renders with:
+ *
+ * ```ts
+ * type Vars = PyloDocumentVariables<"einwilligung-optik">;
+ * ```
+ */
+export type PyloDocumentVariables<K extends PyloDocumentTemplate> =
+  DocumentVariables<RegisteredDocumentTemplates, K>;
 
 /**
  * Entity keys available on the registered schema — e.g. `"contact"`. Use as the
@@ -103,8 +135,8 @@ export type PyloResult<
  * an action. Property access is forwarded to the current global client at
  * access time, so a worker reused across customers always sees the live one.
  */
-export const pylo: PyloClient<RegisteredSchema> = new Proxy(
-  {} as PyloClient<RegisteredSchema>,
+export const pylo: PyloClient<RegisteredSchema, RegisteredDocumentTemplates> = new Proxy(
+  {} as PyloClient<RegisteredSchema, RegisteredDocumentTemplates>,
   {
     get(_target, prop) {
       const client = (globalThis as Record<string, unknown>)[
@@ -172,6 +204,13 @@ export type {
   EventsClient,
   Me,
   FilesClient,
+  DocumentsClient,
+  DocumentGenerateOptions,
+  DocumentPageOptions,
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  DocumentVariables,
+  PyloRenderedDocument,
   UploadUrl,
   UploadProgress,
   UploadSource,

@@ -110,6 +110,17 @@ export type {
   EntityRelationPath,
 } from "./upload.js";
 
+// Documents
+export { buildGenerateDocumentMutation } from "./documents.js";
+export type {
+  DocumentGenerateOptions,
+  DocumentPageOptions,
+  DocumentTemplateMap,
+  DocumentTemplateName,
+  DocumentVariables,
+  PyloRenderedDocument,
+} from "./documents.js";
+
 // Header utilities
 export { mergeHeaders } from "@pylo/auth";
 
@@ -132,6 +143,7 @@ export type {
   EventsClient,
   Me,
   FilesClient,
+  DocumentsClient,
   PyloClient,
 } from "./client.js";
 

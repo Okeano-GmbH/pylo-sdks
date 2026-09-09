@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
 import { loadConfig } from "./config.js";
 import { fetchSchema } from "./fetch-schema.js";
+import { fetchDocumentTemplates } from "./fetch-templates.js";
 import { analyzeEntities } from "./analyze.js";
+import { analyzeDocumentTemplates } from "./analyze-templates.js";
 import {
   generateIndexFile,
   generateEntitiesFile,
@@ -29,12 +31,17 @@ export async function generate(options?: GenerateOptions): Promise<void> {
   const rawEntities = await fetchSchema(config);
   console.log(`  found ${rawEntities.length} entities`);
 
+  console.log("Fetching document templates...");
+  const rawTemplates = await fetchDocumentTemplates(config);
+  console.log(`  found ${rawTemplates.length} document templates`);
+
   console.log("Analyzing entities...");
   const entities = analyzeEntities(rawEntities);
+  const templates = analyzeDocumentTemplates(rawTemplates);
 
   console.log("Generating types...");
   const files: Record<string, string> = {
-    "index.ts": generateIndexFile(entities, importSource),
+    "index.ts": generateIndexFile(entities, importSource, templates),
     "entities.ts": generateEntitiesFile(entities, importSource),
   };
 

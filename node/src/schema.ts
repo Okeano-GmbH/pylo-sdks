@@ -1,10 +1,15 @@
 // Re-exports the browser-safe schema toolkit (@pylo/core/schema) from @pylo/node.
 export {
   ENTITY_LIST_QUERY,
+  DOCUMENT_TEMPLATE_LIST_QUERY,
   fetchSchemaWith,
+  fetchDocumentTemplatesWith,
   analyzeEntities,
+  analyzeDocumentTemplates,
   generateIndexFile,
   generateEntitiesFile,
+  generateDocumentTemplatesType,
+  generateDocumentRefTypes,
 } from "@pylo/core/schema";
 export type {
   SchemaFetcher,
@@ -12,7 +17,14 @@ export type {
   RawEntityField,
   RawEntityRelation,
   EntityListResponse,
+  RawDocumentTemplate,
+  DocumentTemplateListResponse,
   AnalyzedEntity,
   AnalyzedField,
   AnalyzedRelation,
+  AnalyzedDocumentTemplate,
+  TemplateInput,
+  TemplateListItem,
+  TemplateObjectField,
+  TemplateValueType,
 } from "@pylo/core/schema";

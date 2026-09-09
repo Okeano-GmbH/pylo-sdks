@@ -1,5 +1,6 @@
 import { createPyloClient, PyloError } from "@pylo/core";
 import type { PyloClient } from "@pylo/core";
+import type { RegisteredDocumentTemplates } from "./index.js";
 import { getAuthToken } from "@pylo/auth-nextjs/core";
 
 interface ServerOptions {
@@ -8,9 +9,11 @@ interface ServerOptions {
   headers?: Record<string, string>;
 }
 
-export type PyloServer<S> = PyloClient<S>;
+export type PyloServer<S, T = RegisteredDocumentTemplates> = PyloClient<S, T>;
 
-export function createPyloServer<S>(options: ServerOptions): PyloServer<S> {
+export function createPyloServer<S, T = RegisteredDocumentTemplates>(
+  options: ServerOptions,
+): PyloServer<S, T> {
   const auth = options.apiKey
     ? async () => ({ apiKey: options.apiKey! })
     : async () => {
@@ -19,7 +22,7 @@ export function createPyloServer<S>(options: ServerOptions): PyloServer<S> {
         return { token };
       };
 
-  return createPyloClient<S>({
+  return createPyloClient<S, T>({
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
     auth,
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
