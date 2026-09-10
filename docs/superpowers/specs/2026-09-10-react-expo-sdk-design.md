@@ -151,8 +151,13 @@ web. Native has no XSS surface and the OS keychain is genuinely secure.
 
 Approach A: the hook factory takes a transport of query, variables, and headers.
 
-`@pylo/nextjs` keeps its `apiPath` option and wraps it, so existing consumers see
-no change. `@pylo/react` builds its transport from the session's token getter
+It is passed as a hook rather than a value. A single-page app's transport depends
+on the session and therefore lives in React context, which a value supplied at
+module scope could never reach. The default reads the provider's transport, so
+`createPyloHooks<PyloSchema>()` takes no arguments.
+
+`@pylo/nextjs` keeps its `apiPath` option and wraps it in a hook that ignores
+context, so it still needs no provider and existing consumers see no change. `@pylo/react` builds its transport from the session's token getter
 and the endpoint, running the same error mapping `executeGraphQL` already uses so
 that hooks and the imperative client both throw `PyloError`.
 
