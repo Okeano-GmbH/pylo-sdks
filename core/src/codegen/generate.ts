@@ -21,7 +21,12 @@ const VARIANT_RESULT_TYPE = `{ data: ${VARIANT_RESULT_ITEM}[] } | null`;
 // the `pylo` client and the `PyloSelect` / `PyloResult` helpers are typed with
 // no manual `declare module` step. `@pylo/core` has no register, so it's
 // omitted.
-const REGISTERABLE_SOURCES = new Set(["@pylo/node", "@pylo/nextjs"]);
+const REGISTERABLE_SOURCES = new Set([
+  "@pylo/node",
+  "@pylo/nextjs",
+  "@pylo/react",
+  "@pylo/expo",
+]);
 
 // `{}` means "any non-nullish value" and trips no-empty-object-type. This keeps
 // `keyof` at `never`, so `select` still rejects unknown keys — unlike
