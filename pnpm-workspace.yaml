@@ -5,6 +5,7 @@ packages:
   - "node"
   - "node-utils"
   - "nextjs"
+  - "react"
 allowBuilds:
   esbuild: true
   sharp: true

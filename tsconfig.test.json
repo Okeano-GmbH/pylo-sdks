@@ -14,7 +14,8 @@
     "paths": {
       "@pylo/core": ["./core/src/index.ts"],
       "@pylo/auth": ["./auth/src/index.ts"],
-      "@pylo/auth-nextjs": ["./auth-nextjs/src/index.ts"]
+      "@pylo/auth-nextjs": ["./auth-nextjs/src/index.ts"],
+      "@pylo/react": ["./react/src/index.ts"]
     }
   },
   "include": ["**/test/**/*.test-d.ts"],
