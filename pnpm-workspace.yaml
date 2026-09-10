@@ -6,6 +6,7 @@ packages:
   - "node-utils"
   - "nextjs"
   - "react"
+  - "expo"
 allowBuilds:
   esbuild: true
   sharp: true
