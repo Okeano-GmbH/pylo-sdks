@@ -8,13 +8,16 @@
 		"test:watch": "vitest",
 		"changeset": "changeset",
 		"write:versions": "changeset version",
-		"publish:versions": "pnpm test && pnpm -r publish --access public"
+		"publish:versions": "pnpm test && pnpm -r publish --access public",
+		"check:packaging": "pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./nextjs exec publint && pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./nextjs exec attw --pack --profile esm-only --exclude-entrypoints cli"
 	},
 	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.5",
 		"@changesets/cli": "^2.29.8",
 		"@eslint/js": "^10.0.1",
 		"@types/node": "^22.19.7",
 		"eslint": "^10.5.0",
+		"publint": "^0.3.24",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.61.1",
 		"vitest": "^4.1.9"
