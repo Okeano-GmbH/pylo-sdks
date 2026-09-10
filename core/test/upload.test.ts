@@ -141,7 +141,7 @@ describe("toUploadPart", () => {
     const part = toUploadPart(file);
     expect(part.fileName).toBe("hello.txt");
     expect(part.mimeType).toBe("text/plain");
-    expect(part.blob.size).toBe(5);
+    expect(part.part.size).toBe(5);
   });
 
   it("requires a fileName for Blobs and raw bytes", () => {
@@ -156,8 +156,8 @@ describe("toUploadPart", () => {
     });
     expect(part.fileName).toBe("raw.bin");
     expect(part.mimeType).toBe("application/octet-stream");
-    expect(part.blob.size).toBe(3);
-    expect(part.blob.type).toBe("application/octet-stream");
+    expect(part.part.size).toBe(3);
+    expect(part.part.type).toBe("application/octet-stream");
   });
 });
 
@@ -338,6 +338,35 @@ describe("client.files", () => {
 
     await expect(client.files.getDownloadUrl("media-1")).resolves.toBe(
       "http://files.test/api/download-file/x?jwt=t",
+    );
+  });
+});
+
+describe("toUploadPart with a React Native file reference", () => {
+  it("passes the reference through and reports an unknown size", () => {
+    const source = { uri: "file:///tmp/a.png", name: "a.png", type: "image/png" };
+    const result = toUploadPart(source);
+    expect(result.part).toBe(source);
+    expect(result.fileName).toBe("a.png");
+    expect(result.mimeType).toBe("image/png");
+    expect(result.size).toBeUndefined();
+  });
+
+  it("lets explicit options override the reference's own name and type", () => {
+    const source = { uri: "file:///tmp/a.png", name: "a.png", type: "image/png" };
+    const result = toUploadPart(source, { fileName: "b.png", mimeType: "image/webp" });
+    expect(result.fileName).toBe("b.png");
+    expect(result.mimeType).toBe("image/webp");
+    expect(result.part).toEqual({
+      uri: "file:///tmp/a.png",
+      name: "b.png",
+      type: "image/webp",
+    });
+  });
+
+  it("still rejects an object that is not a recognised source", () => {
+    expect(() => toUploadPart({ nope: true } as never, { fileName: "x" })).toThrow(
+      /Unsupported upload source/,
     );
   });
 });

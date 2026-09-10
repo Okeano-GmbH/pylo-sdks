@@ -804,7 +804,7 @@ function createFilesClient<S>(
       const part = toUploadPart(source, options);
       const uploadUrl = await requestUploadUrl(input, options);
 
-      await uploadToUrl(uploadUrl.url, part.blob, part.fileName, options ?? {});
+      await uploadToUrl(uploadUrl.url, part.part, part.fileName, options ?? {});
 
       if (options?.attachTo) {
         const { query, variables } = buildAttachMutation(
@@ -825,7 +825,7 @@ function createFilesClient<S>(
         id: uploadUrl.id,
         fileName: part.fileName,
         mimeType: part.mimeType,
-        size: part.blob.size,
+        size: part.size ?? 0,
       };
     },
 
