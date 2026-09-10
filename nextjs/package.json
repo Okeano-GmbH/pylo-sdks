@@ -42,7 +42,8 @@
   "dependencies": {
     "@pylo/auth": "workspace:*",
     "@pylo/auth-nextjs": "workspace:*",
-    "@pylo/core": "workspace:*"
+    "@pylo/core": "workspace:*",
+    "@pylo/react": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-query": ">=5.0.0",

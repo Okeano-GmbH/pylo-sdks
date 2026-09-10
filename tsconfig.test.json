@@ -3,6 +3,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2020",
+    "jsx": "react-jsx",
     "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

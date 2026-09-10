@@ -97,6 +97,9 @@ importers:
       '@pylo/core':
         specifier: workspace:*
         version: link:../core
+      '@pylo/react':
+        specifier: workspace:*
+        version: link:../react
     devDependencies:
       '@tanstack/react-query':
         specifier: ^5.0.0

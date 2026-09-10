@@ -20,6 +20,7 @@ export default defineConfig([
       "next/server",
       "next/headers",
       "@tanstack/react-query",
+      "@pylo/react",
     ],
   },
   {
