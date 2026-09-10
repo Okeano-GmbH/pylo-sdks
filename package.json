@@ -9,7 +9,8 @@
 		"changeset": "changeset",
 		"write:versions": "changeset version",
 		"publish:versions": "pnpm test && pnpm -r publish --access public",
-		"check:packaging": "pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./nextjs exec publint && pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./nextjs exec attw --pack --profile esm-only --exclude-entrypoints cli"
+		"check:packaging": "pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./react --filter=./expo --filter=./nextjs exec publint && pnpm -r --filter=./auth --filter=./auth-nextjs --filter=./core --filter=./node --filter=./react --filter=./expo --filter=./nextjs exec attw --pack --profile esm-only --exclude-entrypoints cli",
+		"check:fixtures": "bash scripts/check-fixtures.sh"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/cli": "^0.18.5",

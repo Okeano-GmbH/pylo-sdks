@@ -1,0 +1,18 @@
+{
+  "name": "fixture-node",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth-0.0.6.tgz",
+    "@pylo/auth-nextjs": "file:../../.fixture-tarballs/pylo-auth-nextjs-0.1.7.tgz",
+    "@pylo/core": "file:../../.fixture-tarballs/pylo-core-0.4.5.tgz",
+    "@pylo/node": "file:../../.fixture-tarballs/pylo-node-0.4.6.tgz"
+  }
+}

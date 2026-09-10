@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "fixture-expo",
+    "slug": "fixture-expo",
+    "version": "1.0.0",
+    "platforms": ["ios"],
+    "newArchEnabled": true
+  }
+}

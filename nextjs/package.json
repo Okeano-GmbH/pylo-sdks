@@ -9,24 +9,30 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
     },
     "./hooks": {
       "types": "./dist/hooks.d.ts",
-      "import": "./dist/hooks.js"
+      "import": "./dist/hooks.js",
+      "default": "./dist/hooks.js"
     },
     "./api": {
       "types": "./dist/api.d.ts",
-      "import": "./dist/api.js"
+      "import": "./dist/api.js",
+      "default": "./dist/api.js"
     },
     "./codegen": {
       "types": "./dist/codegen.d.ts",
-      "import": "./dist/codegen.js"
-    }
+      "import": "./dist/codegen.js",
+      "default": "./dist/codegen.js"
+    },
+    "./package.json": "./package.json"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
