@@ -3,7 +3,14 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/.pylo/**", "**/*.tgz"],
+    ignores: [
+      "**/dist/**",
+      "**/.pylo/**",
+      "**/*.tgz",
+      // Throwaway apps built from packed tarballs, not source we own.
+      "fixtures/**",
+      ".fixture-tarballs/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
