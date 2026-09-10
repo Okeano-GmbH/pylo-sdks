@@ -308,9 +308,15 @@ export type PyloClient<S, T = DocumentTemplateMap> = {
   documents: DocumentsClient<T>;
 };
 
-function getEndpoint(endpoint?: string): string {
+export function resolveEndpoint(endpoint?: string): string {
   if (endpoint) return endpoint;
-  return process.env["PYLO_GRAPHQL_ENDPOINT"] ?? DEFAULT_GRAPHQL_ENDPOINT;
+  // Browser and React Native bundles have no `process`, so reading it directly
+  // throws a ReferenceError rather than yielding undefined.
+  const fromEnv =
+    typeof process !== "undefined"
+      ? process.env["PYLO_GRAPHQL_ENDPOINT"]
+      : undefined;
+  return fromEnv ?? DEFAULT_GRAPHQL_ENDPOINT;
 }
 
 async function executeGraphQL<T>(
@@ -878,7 +884,7 @@ function createDocumentsClient<T>(
 export function createPyloClient<S, T = DocumentTemplateMap>(
   options: ClientOptions,
 ): PyloClient<S, T> {
-  const endpoint = getEndpoint(options.endpoint);
+  const endpoint = resolveEndpoint(options.endpoint);
   const auth = options.auth;
   const globalHeaders = options.headers;
 

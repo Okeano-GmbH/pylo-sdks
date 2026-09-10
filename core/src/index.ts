@@ -128,6 +128,7 @@ export { mergeHeaders } from "@pylo/auth";
 export {
   PyloError,
   createPyloClient,
+  resolveEndpoint,
   toAggregateResult,
   flagsToHeaders,
   PYLO_DRY_RUN_HEADER,
