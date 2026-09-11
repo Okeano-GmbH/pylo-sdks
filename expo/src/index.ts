@@ -149,7 +149,6 @@ export {
   createPyloHooks,
 } from "@pylo/react";
 export type {
-  PyloProviderProps,
   PyloAuth,
   PyloStorage,
   SessionState,
@@ -168,4 +167,6 @@ export type { PyloUser, AuthResult } from "@pylo/auth";
 
 // Shadows the base provider so Expo apps get the keychain without passing one.
 export { PyloProvider } from "./provider.js";
+export type { PyloProviderProps } from "./provider.js";
+export { subscribeAppStateToFocus } from "./app-state.js";
 export { createSecureStorage } from "./storage.js";

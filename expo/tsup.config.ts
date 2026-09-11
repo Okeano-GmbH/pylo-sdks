@@ -13,6 +13,7 @@ export default defineConfig([
       "@tanstack/react-query",
       "@pylo/react",
       "expo-secure-store",
+      "react-native",
     ],
   },
   {

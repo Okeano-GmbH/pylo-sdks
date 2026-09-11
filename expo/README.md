@@ -52,21 +52,22 @@ file equally rather than by size.
 
 ## Refetching when the app returns to the foreground
 
-TanStack Query watches browser events that React Native does not have, so
-queries do not refetch when your app foregrounds. This package does not wire
-that up for you. Add it once at your app's entry point:
+TanStack Query decides focus from a browser event React Native does not have, so
+without wiring, queries never refetch when your app foregrounds. `PyloProvider`
+does this for you.
 
-```ts
-import { AppState, type AppStateStatus } from "react-native";
-import { focusManager } from "@tanstack/react-query";
+Because TanStack's focus manager is global, it applies to every query in your
+app, not only Pylo's. That is what TanStack's own React Native guide recommends.
+If you already wire it up yourself, turn ours off:
 
-AppState.addEventListener("change", (status: AppStateStatus) => {
-  focusManager.setFocused(status === "active");
-});
+```tsx
+<PyloProvider refetchOnAppFocus={false}>
 ```
 
-See the [TanStack Query React Native guide](https://tanstack.com/query/latest/docs/framework/react/react-native)
-for the matching network-state setup.
+Network state is a separate matter and stays opt-in, since it needs a community
+package. See the
+[TanStack Query React Native guide](https://tanstack.com/query/latest/docs/framework/react/react-native)
+for that half.
 
 ## Token storage
 

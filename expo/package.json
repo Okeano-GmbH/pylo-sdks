@@ -38,7 +38,8 @@
   "peerDependencies": {
     "@tanstack/react-query": ">=5.0.0",
     "expo-secure-store": ">=12.0.0",
-    "react": ">=18.0.0"
+    "react": ">=18.0.0",
+    "react-native": ">=0.73.0"
   },
   "devDependencies": {
     "@tanstack/react-query": "^5.0.0",
@@ -46,6 +47,7 @@
     "@types/react": "^19.0.0",
     "expo-secure-store": "^13.0.0",
     "react": "^19.0.0",
+    "react-native": "^0.81.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },

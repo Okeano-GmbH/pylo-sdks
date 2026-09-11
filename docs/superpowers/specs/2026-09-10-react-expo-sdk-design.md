@@ -30,7 +30,6 @@ wrapper. The codegen and CLI are dev-time and framework-neutral.
 - A backend-for-frontend transport for SPAs that do have a server. Considered
   and deferred.
 - Offline query persistence.
-- React Native app-focus wiring for TanStack Query. Documented, not shipped.
 - Runtime end-to-end tests against a live API.
 - Native sign-in, passkeys, or native analytics. These are why `@pylo/expo`
   exists now, but none ship in this release.
@@ -221,6 +220,16 @@ Packaging is checked two ways:
 One changeset set. `@pylo/react` and `@pylo/expo` start at 0.1.0. `@pylo/core`
 takes a minor for the new upload source. `@pylo/nextjs` takes a patch, since its
 public surface is unchanged and the fixtures are what prove that.
+
+## Amendment, 2026-09-11
+
+React Native app-focus wiring was originally a non-goal, on the reasoning that
+apps could follow TanStack's guide themselves. That was the wrong call: without
+it, refetch-on-focus silently never fires on the one platform `@pylo/expo`
+exists for, and the cause is not guessable. It ships in `PyloProvider`, on by
+default and switchable off with `refetchOnAppFocus`, using `AppState` from React
+Native itself so no dependency is added. Network state remains opt-in, since
+that half does need a community package.
 
 ## Known debt
 
