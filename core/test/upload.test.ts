@@ -95,8 +95,8 @@ describe("buildAttachMutation", () => {
       { id: "contact-1" },
     );
     expect(entityKey).toBe("contact");
-    expect(mutationKey).toBe("updateContact");
-    expect(norm(query)).toContain("updateContact(input: $input)");
+    expect(mutationKey).toBe("upsertContact");
+    expect(norm(query)).toContain("upsertContact(input: $input)");
     expect(variables).toEqual({
       input: { id: "contact-1", avatar_set: { id: "media-1" } },
     });
@@ -236,7 +236,7 @@ describe("client.files", () => {
             createUpload: { id: "media-1", url: "http://files.test/api/upload-file/jwt" },
           });
         }
-        return graphqlResponse({ updateContact: { data: { id: "contact-1" } } });
+        return graphqlResponse({ upsertContact: { data: { id: "contact-1" } } });
       }
       calls.push({ url: target, body: init?.body });
       return new Response(JSON.stringify({ success: true, error: null }), { status: 200 });
