@@ -5,13 +5,20 @@ interface BuildResult {
   variables: Record<string, unknown>;
 }
 
+interface UpsertBuildResult extends BuildResult {
+  // The mutation the response is keyed by.
+  field: string;
+}
+
 export function buildUpsertMutation(
   _entityKey: string,
   pascalName: string,
   input: Record<string, unknown>,
-): BuildResult {
-  const mutation = `mutation Update${pascalName}($input: Update${pascalName}Input!) {
-  update${pascalName}(input: $input) {
+): UpsertBuildResult {
+  const field = `upsert${pascalName}`;
+
+  const mutation = `mutation Upsert${pascalName}($input: Upsert${pascalName}Input!) {
+  ${field}(input: $input) {
     data {
       id
     }
@@ -21,20 +28,22 @@ export function buildUpsertMutation(
   return {
     query: mutation,
     variables: { input },
+    field,
   };
 }
 
-// Batch upsert: reuses the per-entity `Update${pascalName}Input` and the
-// backend `bulkUpdate${pascalName}` mutation, which upserts each element (rows
-// without an `id`/`__search_value` are created) inside a single all-or-nothing
-// transaction and returns the affected rows as a list.
+// Batch upsert: upserts each element (rows without an `id`/`__search_value` are
+// created) inside a single all-or-nothing transaction and returns the affected
+// rows as a list.
 export function buildBulkUpsertMutation(
   _entityKey: string,
   pascalName: string,
   inputs: Record<string, unknown>[],
-): BuildResult {
-  const mutation = `mutation BulkUpdate${pascalName}($inputs: [Update${pascalName}Input!]!) {
-  bulkUpdate${pascalName}(inputs: $inputs) {
+): UpsertBuildResult {
+  const field = `bulkUpsert${pascalName}`;
+
+  const mutation = `mutation BulkUpsert${pascalName}($inputs: [Upsert${pascalName}Input!]!) {
+  ${field}(inputs: $inputs) {
     data {
       id
     }
@@ -44,6 +53,7 @@ export function buildBulkUpsertMutation(
   return {
     query: mutation,
     variables: { inputs },
+    field,
   };
 }
 

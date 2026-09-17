@@ -10,25 +10,27 @@ import {
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
 describe("buildUpsertMutation", () => {
-  it("emits an update mutation with a single input variable", () => {
-    const { query, variables } = buildUpsertMutation("contact", "Contact", {
+  it("emits an upsert mutation with a single input variable", () => {
+    const { query, variables, field } = buildUpsertMutation("contact", "Contact", {
       name: "Ada",
     });
-    expect(norm(query)).toContain("mutation UpdateContact($input: UpdateContactInput!)");
-    expect(norm(query)).toContain("updateContact(input: $input) { data { id } }");
+    expect(norm(query)).toContain("mutation UpsertContact($input: UpsertContactInput!)");
+    expect(norm(query)).toContain("upsertContact(input: $input) { data { id } }");
     expect(variables).toEqual({ input: { name: "Ada" } });
+    expect(field).toBe("upsertContact");
   });
 });
 
 describe("buildBulkUpsertMutation", () => {
-  it("emits a bulkUpdate mutation with a list input variable", () => {
+  it("emits a bulkUpsert mutation with a list input variable", () => {
     const inputs = [{ name: "Ada" }, { id: "1", name: "Grace" }];
-    const { query, variables } = buildBulkUpsertMutation("contact", "Contact", inputs);
+    const { query, variables, field } = buildBulkUpsertMutation("contact", "Contact", inputs);
     expect(norm(query)).toContain(
-      "mutation BulkUpdateContact($inputs: [UpdateContactInput!]!)",
+      "mutation BulkUpsertContact($inputs: [UpsertContactInput!]!)",
     );
-    expect(norm(query)).toContain("bulkUpdateContact(inputs: $inputs) { data { id } }");
+    expect(norm(query)).toContain("bulkUpsertContact(inputs: $inputs) { data { id } }");
     expect(variables).toEqual({ inputs });
+    expect(field).toBe("bulkUpsertContact");
   });
 
   it("passes an empty batch through unchanged", () => {

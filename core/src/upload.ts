@@ -190,8 +190,8 @@ export function buildAttachMutation(
       ? { id: attachTo.id, [`${relation}_add`]: ids.map((id) => ({ id })) }
       : { id: attachTo.id, [`${relation}_set`]: { id: ids[0]! } };
 
-  const { query, variables } = buildUpsertMutation(entityKey, pascalName, input);
-  return { query, variables, entityKey, mutationKey: `update${pascalName}` };
+  const { query, variables, field } = buildUpsertMutation(entityKey, pascalName, input);
+  return { query, variables, entityKey, mutationKey: field };
 }
 
 export function toUploadPart(

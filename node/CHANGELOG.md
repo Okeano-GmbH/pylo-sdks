@@ -1,5 +1,16 @@
 # @pylo/node
 
+## 0.5.0
+
+### Minor Changes
+
+- fix: use the new upsert mutations of the backend for sdk upsert functions
+
+### Patch Changes
+
+- Updated dependencies
+  - @pylo/core@0.5.0
+
 ## 0.4.6
 
 ### Patch Changes

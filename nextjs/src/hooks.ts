@@ -473,7 +473,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
       mutationFn: async (input: UpsertInput<S, E>) => {
         const pascalName = capitalize(entity as string);
 
-        const { query, variables } = buildUpsertMutation(
+        const { query, variables, field } = buildUpsertMutation(
           entity as string,
           pascalName,
           input as Record<string, unknown>,
@@ -484,8 +484,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           { data: { id: string } }
         >;
 
-        const mutationKey = `update${pascalName}`;
-        return data[mutationKey]!.data;
+        return data[field]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
         if (!isDryRun) {
@@ -520,7 +519,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
       mutationFn: async (inputs: UpsertInput<S, E>[]) => {
         const pascalName = capitalize(entity as string);
 
-        const { query, variables } = buildBulkUpsertMutation(
+        const { query, variables, field } = buildBulkUpsertMutation(
           entity as string,
           pascalName,
           inputs as Record<string, unknown>[],
@@ -531,8 +530,7 @@ export function createPyloHooks<S>(options: HooksOptions) {
           { data: { id: string }[] }
         >;
 
-        const mutationKey = `bulkUpdate${pascalName}`;
-        return data[mutationKey]!.data;
+        return data[field]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
         if (!isDryRun) {

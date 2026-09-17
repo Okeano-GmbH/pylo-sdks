@@ -505,7 +505,7 @@ function createEntityClient<S, E extends EntityName<S>>(
     async upsert(input, options) {
       const pascalName = capitalize(entityKey);
 
-      const { query, variables } = buildUpsertMutation(
+      const { query, variables, field } = buildUpsertMutation(
         entityKey,
         pascalName,
         input as Record<string, unknown>,
@@ -522,10 +522,9 @@ function createEntityClient<S, E extends EntityName<S>>(
         ),
       );
 
-      const mutationKey = `update${pascalName}`;
-      const result = data[mutationKey];
+      const result = data[field];
       if (!result) {
-        throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);
+        throw new PyloError(`Unexpected response shape — missing ${field}`);
       }
 
       return result.data;
@@ -534,7 +533,7 @@ function createEntityClient<S, E extends EntityName<S>>(
     async bulkUpsert(inputs, options) {
       const pascalName = capitalize(entityKey);
 
-      const { query, variables } = buildBulkUpsertMutation(
+      const { query, variables, field } = buildBulkUpsertMutation(
         entityKey,
         pascalName,
         inputs as Record<string, unknown>[],
@@ -551,10 +550,9 @@ function createEntityClient<S, E extends EntityName<S>>(
         ),
       );
 
-      const mutationKey = `bulkUpdate${pascalName}`;
-      const result = data[mutationKey];
+      const result = data[field];
       if (!result) {
-        throw new PyloError(`Unexpected response shape — missing ${mutationKey}`);
+        throw new PyloError(`Unexpected response shape — missing ${field}`);
       }
 
       return result.data;
