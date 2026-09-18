@@ -1,5 +1,16 @@
 # @pylo/node
 
+## 0.6.0
+
+### Minor Changes
+
+- ea68e18: fix: use the new upsert mutations of the backend for sdk upsert functions
+
+### Patch Changes
+
+- Updated dependencies [ea68e18]
+  - @pylo/core@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes
