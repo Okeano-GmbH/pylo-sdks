@@ -24,6 +24,8 @@ export interface SessionStoreOptions {
   /** Namespaces the storage keys, for apps holding more than one session. */
   keyPrefix?: string;
   onSignOut?: () => void;
+  /** Called after a successful login, not after a refresh. */
+  onSignIn?: () => void;
 }
 
 export interface SessionStore {
@@ -46,6 +48,7 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
   let state: SessionState = { status: "loading", token: null };
   let refreshToken: string | null = null;
   let inFlight: Promise<string | null> | null = null;
+  let ready: Promise<void> | null = null;
   const listeners = new Set<() => void>();
 
   function setState(next: SessionState): void {
@@ -69,6 +72,7 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
   }
 
   async function runRefresh(): Promise<string | null> {
+    await init();
     if (!refreshToken) {
       await clear();
       return null;
@@ -96,6 +100,29 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     return auth_token;
   }
 
+  function init(): Promise<void> {
+    ready ??= (async () => {
+      try {
+        const [auth, stored] = await Promise.all([
+          options.storage.getItem(AUTH_KEY),
+          options.storage.getItem(REFRESH_KEY),
+        ]);
+        refreshToken = stored;
+        setState(
+          auth
+            ? { status: "signedIn", token: auth }
+            : { status: "signedOut", token: null },
+        );
+      } catch {
+        // An unreadable store (SecureStore on a locked device, a blocked
+        // localStorage) must not leave the app on its spinner forever.
+        refreshToken = null;
+        setState({ status: "signedOut", token: null });
+      }
+    })();
+    return ready;
+  }
+
   function refresh(): Promise<string | null> {
     // Single-flight: many hooks mounting together must produce one refresh, and
     // a rotated refresh token would make a second concurrent call fail anyway.
@@ -113,20 +140,12 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
       return () => void listeners.delete(listener);
     },
 
-    async init() {
-      const [auth, stored] = await Promise.all([
-        options.storage.getItem(AUTH_KEY),
-        options.storage.getItem(REFRESH_KEY),
-      ]);
-      refreshToken = stored;
-      setState(
-        auth
-          ? { status: "signedIn", token: auth }
-          : { status: "signedOut", token: null },
-      );
-    },
+    init,
 
     async getToken() {
+      // Hooks mount and fire before the provider's init effect has run, so
+      // the first request would otherwise go out with no token at all.
+      await init();
       if (!state.token) return null;
       if (shouldRefreshToken(state.token)) return refresh();
       return state.token;
@@ -166,6 +185,7 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
 
       const { auth_token, refresh_token } = response.data.login.data;
       await persist(auth_token, refresh_token);
+      options.onSignIn?.();
 
       return { success: true, authToken: auth_token, refreshToken: refresh_token };
     },

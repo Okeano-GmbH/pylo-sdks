@@ -66,6 +66,29 @@ describe("init", () => {
 
     expect(store.getState().token).toBe(token);
   });
+
+  it("settles signed out when storage cannot be read", async () => {
+    const storage = createMemoryStorage();
+    storage.getItem = async () => {
+      throw new Error("keystore locked");
+    };
+
+    const store = createSessionStore({ ...options(), storage });
+    await store.init();
+
+    expect(store.getState()).toEqual({ status: "signedOut", token: null });
+  });
+
+  it("reads storage once however often it is called", async () => {
+    const storage = createMemoryStorage();
+    const getItem = vi.spyOn(storage, "getItem");
+
+    const store = createSessionStore({ ...options(), storage });
+    await Promise.all([store.init(), store.init()]);
+    await store.init();
+
+    expect(getItem).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("login", () => {
@@ -84,6 +107,24 @@ describe("login", () => {
     expect(result.success).toBe(true);
     expect(store.getState()).toEqual({ status: "signedIn", token });
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
+  });
+
+  it("notifies onSignIn after a login but not after a refresh", async () => {
+    const onSignIn = vi.fn();
+    graphqlRequest.mockResolvedValue({
+      data: { login: { data: { auth_token: stale(), refresh_token: "r1" } } },
+    });
+
+    const store = createSessionStore({ ...options(), onSignIn });
+    await store.login("a@b.c", "pw");
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+
+    graphqlRequest.mockResolvedValue({
+      data: { refreshToken: { data: { auth_token: fresh(), refresh_token: "r2" } } },
+    });
+    await store.getToken();
+    expect(graphqlRequest).toHaveBeenCalledTimes(2);
+    expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
   it("reports failure without signing in", async () => {
@@ -175,6 +216,19 @@ describe("getToken", () => {
 
     expect(await store.getToken()).toBe(token);
     expect(graphqlRequest).not.toHaveBeenCalled();
+  });
+
+  it("waits for init before answering", async () => {
+    const storage = createMemoryStorage();
+    const token = fresh();
+    await storage.setItem("pylo.auth_token", token);
+
+    // No explicit init: a hook mounting before the provider's effect.
+    const store = createSessionStore({ ...options(), storage });
+    expect(store.getState().status).toBe("loading");
+
+    await expect(store.getToken()).resolves.toBe(token);
+    expect(store.getState().status).toBe("signedIn");
   });
 
   it("returns null when there is no session", async () => {

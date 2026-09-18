@@ -719,15 +719,11 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         setError(null);
         setUploadedFiles([]);
 
-        const parts = list.map((source) => toUploadPart(source));
-
-        // A streamed React Native reference has no length, so a byte-weighted
-        // total is unavailable. Weighting files equally keeps the percentage
-        // monotonic either way.
-        const sizes = parts.map((part) => part.size);
-        const grandTotal = sizes.every((size) => size !== undefined)
-          ? sizes.reduce((sum, size) => sum + (size ?? 0), 0)
-          : undefined;
+        // Declared ahead of the try so the progress reporter below can close
+        // over them, but `toUploadPart` throws for a nameless Blob and that must
+        // land in the catch like any other failure.
+        let parts: ReturnType<typeof toUploadPart>[] = [];
+        let grandTotal: number | undefined;
 
         const loadedPerFile: number[] = new Array<number>(list.length).fill(0);
         const doneFlags: boolean[] = new Array<boolean>(list.length).fill(false);
@@ -750,6 +746,16 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         };
 
         try {
+          parts = list.map((source) => toUploadPart(source));
+
+          // A streamed React Native reference has no length, so a byte-weighted
+          // total is unavailable. Weighting files equally keeps the percentage
+          // monotonic either way.
+          const sizes = parts.map((part) => part.size);
+          grandTotal = sizes.every((size) => size !== undefined)
+            ? sizes.reduce((sum, size) => sum + (size ?? 0), 0)
+            : undefined;
+
           // Same pre-flight the server client runs — also rejects a multi-file
           // batch aimed at a `"set"` relation before any bytes are sent.
           const input = buildCreateUploadInput(opts, list.length);

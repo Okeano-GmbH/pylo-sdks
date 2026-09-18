@@ -67,6 +67,7 @@ export function PyloProvider(props: PyloProviderProps) {
       ...(props.appId !== undefined ? { appId: props.appId } : {}),
       ...(props.keyPrefix !== undefined ? { keyPrefix: props.keyPrefix } : {}),
       onSignOut: () => queryClient.clear(),
+      onSignIn: () => void queryClient.invalidateQueries({ queryKey: ["pylo"] }),
     });
   }
   const store = storeRef.current;

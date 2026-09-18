@@ -30,7 +30,14 @@ interface WebStorageLike {
  * outright, so a read consults memory whenever the web store comes up empty.
  */
 export function createLocalStorageAdapter(): PyloStorage {
-  const web = (globalThis as { localStorage?: WebStorageLike }).localStorage;
+  // Chromium throws SecurityError on the property access itself when a
+  // third-party iframe has storage blocked, so even the lookup is guarded.
+  let web: WebStorageLike | undefined;
+  try {
+    web = (globalThis as { localStorage?: WebStorageLike }).localStorage;
+  } catch {
+    web = undefined;
+  }
   if (!web) return createMemoryStorage();
 
   const fallback = createMemoryStorage();
