@@ -1,6 +1,6 @@
 {
   "name": "@pylo/react",
-  "version": "0.0.0",
+  "version": "0.6.0",
   "description": "Type-safe React SDK for Pylo \u2014 hooks, session provider, client",
   "type": "module",
   "bin": {

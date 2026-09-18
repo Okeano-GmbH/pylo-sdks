@@ -7,17 +7,19 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/.fixture-tarballs"
 rm -rf "$out" && mkdir -p "$out"
 
-for pkg in auth auth-nextjs core node react expo nextjs; do
-  (cd "$root/$pkg" && pnpm pack --pack-destination "$out" >/dev/null)
-done
-
-# Tarball names carry each package's version. A glob would be wrong here:
-# `pylo-auth-*` also matches `pylo-auth-nextjs`, so the name is built exactly.
+# `pnpm pack` names each tarball after its version. The fixtures' manifests
+# pin the tarballs by path, so they are renamed to a version-free name and
+# stay valid across releases. A glob would be wrong here: `pylo-auth-*` also
+# matches `pylo-auth-nextjs`, so the name is built exactly.
 tarball() {
-  local ver
-  ver="$(node -p "require('$root/$1/package.json').version")"
-  echo "$out/pylo-$1-$ver.tgz"
+  echo "$out/pylo-$1.tgz"
 }
+
+for pkg in auth auth-nextjs core node react expo nextjs; do
+  ver="$(node -p "require('$root/$pkg/package.json').version")"
+  (cd "$root/$pkg" && pnpm pack --pack-destination "$out" >/dev/null)
+  mv "$out/pylo-$pkg-$ver.tgz" "$(tarball "$pkg")"
+done
 
 install_into() {
   local fixture="$1"; shift

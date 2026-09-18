@@ -6,10 +6,10 @@
     "check": "node check-single-instance.mjs && tsc --noEmit && npx expo export --platform ios --output-dir .export --clear"
   },
   "dependencies": {
-    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth-0.0.6.tgz",
-    "@pylo/core": "file:../../.fixture-tarballs/pylo-core-0.4.5.tgz",
-    "@pylo/expo": "file:../../.fixture-tarballs/pylo-expo-0.0.0.tgz",
-    "@pylo/react": "file:../../.fixture-tarballs/pylo-react-0.0.0.tgz",
+    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth.tgz",
+    "@pylo/core": "file:../../.fixture-tarballs/pylo-core.tgz",
+    "@pylo/expo": "file:../../.fixture-tarballs/pylo-expo.tgz",
+    "@pylo/react": "file:../../.fixture-tarballs/pylo-react.tgz",
     "@tanstack/react-query": "^5.90.0",
     "expo": "^54.0.0",
     "expo-secure-store": "^15.0.0",

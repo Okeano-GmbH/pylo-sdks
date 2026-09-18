@@ -73,6 +73,10 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
 
   async function runRefresh(): Promise<string | null> {
     await init();
+    // Nothing to refresh when there is no session. Clearing here would wipe the
+    // query cache and re-render every consumer for a request that never carried
+    // a token, and each re-render would send it again.
+    if (state.status !== "signedIn") return null;
     if (!refreshToken) {
       await clear();
       return null;

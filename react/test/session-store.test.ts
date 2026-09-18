@@ -291,6 +291,23 @@ describe("refresh failure", () => {
   });
 });
 
+describe("refresh while signed out", () => {
+  it("returns null without touching storage, state or the cache", async () => {
+    const onSignOut = vi.fn();
+    const store = createSessionStore({ ...options(), onSignOut });
+    await store.init();
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    expect(await store.refresh()).toBeNull();
+
+    expect(graphqlRequest).not.toHaveBeenCalled();
+    expect(onSignOut).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.getState().status).toBe("signedOut");
+  });
+});
+
 describe("logout", () => {
   it("clears storage and state", async () => {
     const storage = createMemoryStorage();

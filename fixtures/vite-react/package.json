@@ -6,10 +6,10 @@
     "check": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth-0.0.6.tgz",
-    "@pylo/auth-nextjs": "file:../../.fixture-tarballs/pylo-auth-nextjs-0.1.7.tgz",
-    "@pylo/core": "file:../../.fixture-tarballs/pylo-core-0.4.5.tgz",
-    "@pylo/react": "file:../../.fixture-tarballs/pylo-react-0.0.0.tgz",
+    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth.tgz",
+    "@pylo/auth-nextjs": "file:../../.fixture-tarballs/pylo-auth-nextjs.tgz",
+    "@pylo/core": "file:../../.fixture-tarballs/pylo-core.tgz",
+    "@pylo/react": "file:../../.fixture-tarballs/pylo-react.tgz",
     "@tanstack/react-query": "^5.90.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

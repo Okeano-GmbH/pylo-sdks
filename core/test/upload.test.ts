@@ -364,6 +364,18 @@ describe("toUploadPart with a React Native file reference", () => {
     });
   });
 
+  it("names a reference from its uri when the picker gave none", () => {
+    const source = { uri: "file:///tmp/photos/IMG%201.jpg?x=1", name: null, type: null };
+    const result = toUploadPart(source);
+    expect(result.fileName).toBe("IMG 1.jpg");
+    expect(result.mimeType).toBeUndefined();
+    expect(result.part).toEqual({ uri: source.uri, name: "IMG 1.jpg" });
+  });
+
+  it("rejects a nameless reference whose uri has no file segment", () => {
+    expect(() => toUploadPart({ uri: "content://" })).toThrow(/fileName is required/);
+  });
+
   it("still rejects an object that is not a recognised source", () => {
     expect(() => toUploadPart({ nope: true } as never, { fileName: "x" })).toThrow(
       /Unsupported upload source/,

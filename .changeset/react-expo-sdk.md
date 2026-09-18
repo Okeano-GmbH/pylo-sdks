@@ -1,6 +1,4 @@
 ---
-"@pylo/react": minor
-"@pylo/expo": minor
 "@pylo/core": minor
 "@pylo/nextjs": patch
 "@pylo/node": patch

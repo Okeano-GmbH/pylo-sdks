@@ -51,8 +51,9 @@ export interface UploadProgress {
  */
 export interface UploadFileRef {
   uri: string;
-  name: string;
-  type?: string;
+  /** Pickers on iOS often report no file name; the SDK then takes the uri's last segment. */
+  name?: string | null;
+  type?: string | null;
 }
 
 export type UploadSource = File | Blob | ArrayBuffer | ArrayBufferView | UploadFileRef;
@@ -64,9 +65,13 @@ export function isUploadFileRef(source: unknown): source is UploadFileRef {
   return (
     typeof source === "object" &&
     source !== null &&
-    typeof (source as UploadFileRef).uri === "string" &&
-    typeof (source as UploadFileRef).name === "string"
+    typeof (source as UploadFileRef).uri === "string"
   );
+}
+
+function fileNameFromUri(uri: string): string | undefined {
+  const last = uri.split("?")[0]!.split("#")[0]!.split("/").pop();
+  return last ? decodeURIComponent(last) : undefined;
 }
 
 /**
@@ -249,9 +254,15 @@ export function toUploadPart(
   }
 
   if (isUploadFileRef(source)) {
-    const fileName = options?.fileName ?? source.name;
-    const mimeType = options?.mimeType ?? source.type;
-    const part =
+    const fileName =
+      options?.fileName ?? source.name ?? fileNameFromUri(source.uri);
+    if (!fileName) {
+      throw new PyloError("fileName is required when the file reference has no name");
+    }
+    const mimeType = options?.mimeType ?? source.type ?? undefined;
+    // React Native's FormData reads `name` and `type` off the object, so a
+    // reference whose values were filled in or overridden is rebuilt.
+    const part: UploadFileRef =
       fileName === source.name && mimeType === source.type
         ? source
         : {
