@@ -11,7 +11,7 @@
 		"publish:versions": "pnpm test && pnpm -r publish --access public"
 	},
 	"devDependencies": {
-		"@changesets/cli": "^2.29.8",
+		"@changesets/cli": "^3.0.3",
 		"@eslint/js": "^10.0.1",
 		"@types/node": "^22.19.7",
 		"eslint": "^10.5.0",
