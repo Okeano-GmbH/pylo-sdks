@@ -142,3 +142,12 @@ vite.config.ts.timestamp-*
 
 # Playwright MCP session output
 .playwright-mcp/
+
+# Packaging fixtures: tarballs and their throwaway installs
+.fixture-tarballs/
+fixtures/*/node_modules/
+fixtures/*/package-lock.json
+fixtures/*/.next/
+fixtures/*/dist/
+fixtures/*/.export/
+fixtures/*/.expo/

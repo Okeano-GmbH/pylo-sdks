@@ -1,0 +1,72 @@
+{
+  "name": "@pylo/expo",
+  "version": "0.6.0",
+  "description": "Type-safe Expo and React Native SDK for Pylo",
+  "type": "module",
+  "bin": {
+    "pylo": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js",
+      "default": "./dist/codegen.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsc -w",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@pylo/auth": "workspace:*",
+    "@pylo/core": "workspace:*",
+    "@pylo/react": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
+    "expo-secure-store": ">=12.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.73.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.0.0",
+    "expo-secure-store": "^13.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.81.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "pylo",
+    "expo",
+    "react-native",
+    "sdk"
+  ],
+  "author": "Okeano GmbH",
+  "license": "MIT",
+  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/expo#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
+    "directory": "expo"
+  },
+  "bugs": {
+    "url": "https://github.com/Okeano-GmbH/pylo-sdks/issues"
+  },
+  "packageManager": "pnpm@10.12.1"
+}

@@ -863,3 +863,18 @@ describe("generateIndexFile — is_writeable", () => {
     expect(out()).not.toContain("'generated_at'");
   });
 });
+
+describe("PyloRegister augmentation", () => {
+  it.each(["@pylo/node", "@pylo/nextjs", "@pylo/react", "@pylo/expo"])(
+    "registers the schema for %s",
+    (source) => {
+      const output = generateIndexFile([], source);
+      expect(output).toContain(`declare module '${source}'`);
+      expect(output).toContain("schema: PyloSchema;");
+    },
+  );
+
+  it("does not register for @pylo/core, which has no PyloRegister", () => {
+    expect(generateIndexFile([], "@pylo/core")).not.toContain("declare module");
+  });
+});

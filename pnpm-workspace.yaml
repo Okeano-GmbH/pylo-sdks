@@ -5,6 +5,9 @@ packages:
   - "node"
   - "node-utils"
   - "nextjs"
+  - "react"
+  - "expo"
+  - "!fixtures/**"
 allowBuilds:
   esbuild: true
   sharp: true

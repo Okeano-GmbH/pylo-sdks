@@ -45,7 +45,34 @@ export interface UploadProgress {
   percent: number;
 }
 
-export type UploadSource = File | Blob | ArrayBuffer | ArrayBufferView;
+/**
+ * A local file as React Native describes one. Its `FormData` streams the file
+ * from disk, so the SDK never reads the bytes and the length is unknown.
+ */
+export interface UploadFileRef {
+  uri: string;
+  /** Pickers on iOS often report no file name; the SDK then takes the uri's last segment. */
+  name?: string | null;
+  type?: string | null;
+}
+
+export type UploadSource = File | Blob | ArrayBuffer | ArrayBufferView | UploadFileRef;
+
+/** What actually gets appended to a `FormData`. */
+export type UploadPart = Blob | UploadFileRef;
+
+export function isUploadFileRef(source: unknown): source is UploadFileRef {
+  return (
+    typeof source === "object" &&
+    source !== null &&
+    typeof (source as UploadFileRef).uri === "string"
+  );
+}
+
+function fileNameFromUri(uri: string): string | undefined {
+  const last = uri.split("?")[0]!.split("#")[0]!.split("/").pop();
+  return last ? decodeURIComponent(last) : undefined;
+}
 
 /**
  * `"<entity>.<relation>"` path to a pyloMedia relation, e.g. `"contact.avatar"`.
@@ -197,7 +224,12 @@ export function buildAttachMutation(
 export function toUploadPart(
   source: UploadSource,
   options?: { fileName?: string; mimeType?: string },
-): { blob: Blob; fileName: string; mimeType: string | undefined } {
+): {
+  part: UploadPart;
+  fileName: string;
+  mimeType: string | undefined;
+  size: number | undefined;
+} {
   if (typeof File !== "undefined" && source instanceof File) {
     const fileName = options?.fileName ?? source.name;
     const mimeType = options?.mimeType ?? (source.type || undefined);
@@ -205,7 +237,7 @@ export function toUploadPart(
       options?.mimeType !== undefined && options.mimeType !== source.type
         ? source.slice(0, source.size, options.mimeType)
         : source;
-    return { blob, fileName, mimeType };
+    return { part: blob, fileName, mimeType, size: blob.size };
   }
 
   if (typeof Blob !== "undefined" && source instanceof Blob) {
@@ -218,7 +250,27 @@ export function toUploadPart(
       options?.mimeType !== undefined && options.mimeType !== source.type
         ? source.slice(0, source.size, options.mimeType)
         : source;
-    return { blob, fileName, mimeType };
+    return { part: blob, fileName, mimeType, size: blob.size };
+  }
+
+  if (isUploadFileRef(source)) {
+    const fileName =
+      options?.fileName ?? source.name ?? fileNameFromUri(source.uri);
+    if (!fileName) {
+      throw new PyloError("fileName is required when the file reference has no name");
+    }
+    const mimeType = options?.mimeType ?? source.type ?? undefined;
+    // React Native's FormData reads `name` and `type` off the object, so a
+    // reference whose values were filled in or overridden is rebuilt.
+    const part: UploadFileRef =
+      fileName === source.name && mimeType === source.type
+        ? source
+        : {
+            uri: source.uri,
+            name: fileName,
+            ...(mimeType !== undefined ? { type: mimeType } : {}),
+          };
+    return { part, fileName, mimeType, size: undefined };
   }
 
   const fileName = options?.fileName;
@@ -242,7 +294,7 @@ export function toUploadPart(
     [bytes],
     options?.mimeType !== undefined ? { type: options.mimeType } : {},
   );
-  return { blob, fileName, mimeType: options?.mimeType };
+  return { part: blob, fileName, mimeType: options?.mimeType, size: blob.size };
 }
 
 // The fileservice responds `{ success, error }` with 2xx on success.
@@ -289,19 +341,28 @@ interface XhrLike {
  */
 export function uploadToUrl(
   url: string,
-  blob: Blob,
+  part: UploadPart,
   fileName: string,
   options?: { onProgress?: (progress: UploadProgress) => void; signal?: AbortSignal },
 ): Promise<void> {
   const form = new FormData();
-  form.append("file", blob, fileName);
+  if (part instanceof Blob) {
+    form.append("file", part, fileName);
+  } else {
+    // React Native's FormData takes the reference itself and streams the file.
+    form.append("file", part as unknown as Blob, fileName);
+  }
 
-  const total = blob.size;
-  const report = (loaded: number) => {
+  // A streamed reference has no length the SDK can know up front.
+  const total = part instanceof Blob ? part.size : undefined;
+  const report = (loaded: number, knownTotal = total) => {
     options?.onProgress?.({
       loaded,
-      total,
-      percent: total > 0 ? Math.round((loaded / total) * 100) : 100,
+      total: knownTotal ?? loaded,
+      percent:
+        knownTotal !== undefined && knownTotal > 0
+          ? Math.round((loaded / knownTotal) * 100)
+          : 100,
     });
   };
 
@@ -320,13 +381,17 @@ export function uploadToUrl(
         if (!event.lengthComputable || event.total === 0) return;
         // Wire bytes include the multipart framing — map the ratio onto the
         // blob size so `loaded`/`total` stay in file-byte units.
+        if (total === undefined) {
+          report(event.loaded, event.total);
+          return;
+        }
         const ratio = Math.min(event.loaded / event.total, 1);
         report(Math.round(ratio * total));
       };
       xhr.onload = () => {
         try {
           assertUploadSucceeded(xhr.status, xhr.responseText);
-          report(total);
+          report(total ?? 0);
           resolve();
         } catch (error) {
           reject(error);
@@ -346,6 +411,6 @@ export function uploadToUrl(
     ...(options?.signal !== undefined ? { signal: options.signal } : {}),
   }).then(async (response) => {
     assertUploadSucceeded(response.status, await response.text());
-    report(total);
+    report(total ?? 0);
   });
 }

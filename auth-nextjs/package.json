@@ -15,7 +15,8 @@
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js",
       "default": "./dist/core.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsup src/index.ts src/core.ts --dts --format esm --out-dir dist --no-splitting --clean",

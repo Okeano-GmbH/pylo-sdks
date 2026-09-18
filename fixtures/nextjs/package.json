@@ -1,0 +1,23 @@
+{
+  "name": "fixture-nextjs",
+  "private": true,
+  "scripts": {
+    "check": "next build"
+  },
+  "dependencies": {
+    "@pylo/auth": "file:../../.fixture-tarballs/pylo-auth.tgz",
+    "@pylo/auth-nextjs": "file:../../.fixture-tarballs/pylo-auth-nextjs.tgz",
+    "@pylo/core": "file:../../.fixture-tarballs/pylo-core.tgz",
+    "@pylo/nextjs": "file:../../.fixture-tarballs/pylo-nextjs.tgz",
+    "@pylo/react": "file:../../.fixture-tarballs/pylo-react.tgz",
+    "@tanstack/react-query": "^5.90.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.3"
+  }
+}
