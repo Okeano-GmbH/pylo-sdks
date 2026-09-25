@@ -63,7 +63,7 @@
   ],
   "author": "Okeano GmbH",
   "license": "MIT",
-  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/react#readme",
+  "homepage": "https://docs.pyloapp.com/getting-started/quickstart-react",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",

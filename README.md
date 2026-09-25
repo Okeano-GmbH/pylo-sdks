@@ -13,7 +13,9 @@ TypeScript SDKs for building applications with Pylo.
 
 Every package generates its types from your own Pylo schema with `pylo generate`.
 
-Content is coming soon.
+## Documentation
+
+[https://docs.pyloapp.com](https://docs.pyloapp.com)
 
 If you need help, please contact us at mail@okeano.de
 
