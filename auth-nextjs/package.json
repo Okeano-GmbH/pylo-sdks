@@ -35,7 +35,7 @@
   ],
   "author": "Okeano GmbH",
   "license": "MIT",
-  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/auth-nextjs#readme",
+  "homepage": "https://docs.pyloapp.com/authentication/nextjs-setup",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",

@@ -49,7 +49,7 @@
   },
   "author": "Okeano GmbH",
   "license": "MIT",
-  "homepage": "https://github.com/Okeano-GmbH/pylo-sdks/tree/main/core#readme",
+  "homepage": "https://docs.pyloapp.com/getting-started/overview",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Okeano-GmbH/pylo-sdks.git",
