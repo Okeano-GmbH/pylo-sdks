@@ -26,7 +26,7 @@ const getEndpoint = (): string =>
  *
  * @example
  * ```ts
- * import { getUser } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { getUser } from '@pylo/auth-nextjs'
  *
  * export default async function ProfilePage() {
  *   const user = await getUser()
@@ -64,7 +64,7 @@ export async function getUser(): Promise<PyloUser | null> {
  *
  * @example
  * ```ts
- * import { loggedIn } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { loggedIn } from '@pylo/auth-nextjs'
  *
  * export default async function Page() {
  *   if (await loggedIn()) {
@@ -134,7 +134,7 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<PyloUse
  * @example
  * ```ts
  * 'use server'
- * import { login } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { login } from '@pylo/auth-nextjs'
  *
  * export async function loginAction(formData: FormData) {
  *   const email = formData.get('email') as string
@@ -194,7 +194,7 @@ export async function login(email: string, password: string): Promise<AuthResult
  * @example
  * ```ts
  * 'use server'
- * import { logout } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { logout } from '@pylo/auth-nextjs'
  * import { redirect } from 'next/navigation'
  *
  * export async function logoutAction() {

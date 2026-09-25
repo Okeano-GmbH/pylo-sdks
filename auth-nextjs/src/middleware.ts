@@ -50,18 +50,17 @@ function isApiRouteRequest(request: NextRequest): boolean {
  * Full middleware handler that protects routes and handles auth automatically.
  * This is the simplest way to add auth to your Next.js app.
  *
+ * The matching `config.matcher` is in the setup guide:
+ * https://docs.pyloapp.com/authentication/nextjs-setup
+ *
  * @example
  * ```ts
  * // proxy.ts
- * import { createPyloProxy } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { createPyloProxy } from '@pylo/auth-nextjs'
  *
  * export const proxy = createPyloProxy({
  *   publicPaths: ['/auth', '/public'],
  * })
- *
- * export const config = {
- *   matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|$).*)'],
- * }
  * ```
  */
 export function createPyloProxy(options?: PyloAuthOptions) {
@@ -96,7 +95,7 @@ export function createPyloProxy(options?: PyloAuthOptions) {
  *
  * @example
  * ```ts
- * import { pyloAuth } from '@okeano-gmbh/pylo-auth-nextjs'
+ * import { pyloAuth } from '@pylo/auth-nextjs'
  *
  * export async function proxy(request) {
  *   const auth = await pyloAuth(request, {
