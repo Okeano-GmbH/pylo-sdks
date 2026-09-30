@@ -11,9 +11,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPyloClient, resolveEndpoint } from "@pylo/core";
 import type { PyloClient } from "@pylo/core";
 import { ME_QUERY } from "@pylo/auth";
-import type { AuthResult, MeResponse, PyloUser } from "@pylo/auth";
+import type {
+  AuthResult,
+  HandoffCrypto,
+  MeResponse,
+  PyloUser,
+  SocialProvider,
+} from "@pylo/auth";
 import { createSessionStore } from "./session/store.js";
 import type { SessionState, SessionStore } from "./session/store.js";
+import { createSocialSignIn } from "./session/social.js";
+import type { OpenAuthSession, SocialSignIn } from "./session/social.js";
 import { createLocalStorageAdapter } from "./session/storage.js";
 import type { PyloStorage } from "./session/storage.js";
 import { createDirectTransport } from "./transport.js";
@@ -24,6 +32,7 @@ interface PyloContextValue {
   endpoint: string;
   state: SessionState;
   store: SessionStore | null;
+  social: SocialSignIn | null;
   getToken: () => Promise<string | null>;
 }
 
@@ -48,6 +57,12 @@ export interface PyloProviderProps {
    * session entirely: no login, no logout, no refresh.
    */
   getToken?: () => Promise<string | null>;
+  /**
+   * Runs social sign-in in an in-app browser session instead of navigating the
+   * page. Resolves with the URL the session ended on, or `null` when dismissed.
+   */
+  openAuthSession?: OpenAuthSession;
+  handoffCrypto?: HandoffCrypto;
 }
 
 const SIGNED_OUT: SessionState = { status: "signedOut", token: null };
@@ -60,6 +75,9 @@ export function PyloProvider(props: PyloProviderProps) {
   // One store for the provider's lifetime. Switching auth mode mid-flight is
   // not a supported transition, so nothing here reacts to prop changes.
   const storeRef = useRef<SessionStore | null>(null);
+  const socialRef = useRef<SocialSignIn | null>(null);
+  const openAuthSessionRef = useRef(props.openAuthSession);
+  openAuthSessionRef.current = props.openAuthSession;
   if (storeRef.current === null && !props.getToken) {
     storeRef.current = createSessionStore({
       endpoint,
@@ -69,8 +87,24 @@ export function PyloProvider(props: PyloProviderProps) {
       onSignOut: () => queryClient.clear(),
       onSignIn: () => void queryClient.invalidateQueries({ queryKey: ["pylo"] }),
     });
+    if (props.appId !== undefined) {
+      socialRef.current = createSocialSignIn({
+        endpoint,
+        appId: props.appId,
+        keyPrefix: props.keyPrefix ?? "pylo",
+        store: storeRef.current,
+        ...(props.openAuthSession
+          ? {
+              openAuthSession: (url: string, returnUrl: string) =>
+                openAuthSessionRef.current!(url, returnUrl),
+            }
+          : {}),
+        ...(props.handoffCrypto ? { crypto: props.handoffCrypto } : {}),
+      });
+    }
   }
   const store = storeRef.current;
+  const social = socialRef.current;
 
   const state = useSyncExternalStore(
     store ? store.subscribe : NO_OP,
@@ -101,8 +135,8 @@ export function PyloProvider(props: PyloProviderProps) {
       ...(store ? { onUnauthorized: () => store.refresh() } : {}),
     });
 
-    return { transport, endpoint, state, store, getToken };
-  }, [endpoint, state, store, isEscapeHatch]);
+    return { transport, endpoint, state, store, social, getToken };
+  }, [endpoint, state, store, social, isEscapeHatch]);
 
   return <PyloContext.Provider value={value}>{props.children}</PyloContext.Provider>;
 }
@@ -126,7 +160,8 @@ export function usePyloClient<S>(): PyloClient<S> {
   );
 }
 
-export interface PyloAuth {
+export interface PyloAuth<P extends string = SocialProvider, U extends string = string>
+  extends SocialSignIn<P, U> {
   isLoading: boolean;
   isSignedIn: boolean;
   user: PyloUser | undefined;
@@ -136,7 +171,7 @@ export interface PyloAuth {
 }
 
 export function usePyloAuth(): PyloAuth {
-  const { state, store, transport, getToken } = usePyloContext();
+  const { state, store, social, transport, getToken } = usePyloContext();
   const isSignedIn = state.status === "signedIn";
 
   const me = useQuery({
@@ -164,6 +199,17 @@ export function usePyloAuth(): PyloAuth {
       }
       await store.logout();
     },
+    signInWith: async (provider, options) =>
+      requireSocial("signInWith").signInWith(provider, options),
+    completeSignIn: async (url) => requireSocial("completeSignIn").completeSignIn(url),
     getToken,
   };
+
+  function requireSocial(method: string): SocialSignIn {
+    if (!store) {
+      throw new Error(`${method} is unavailable when PyloProvider is given getToken`);
+    }
+    if (!social) throw new Error(`${method} requires PyloProvider's appId`);
+    return social;
+  }
 }

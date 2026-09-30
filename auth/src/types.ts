@@ -45,11 +45,19 @@ export interface AuthResult {
   error?: AuthError;
 }
 
+export type SocialProvider = "google" | "microsoft";
+
 /**
  * Authentication error
  */
 export interface AuthError {
-  code: "INVALID_CREDENTIALS" | "TOKEN_EXPIRED" | "NETWORK_ERROR" | "SERVER_ERROR";
+  code:
+    | "INVALID_CREDENTIALS"
+    | "TOKEN_EXPIRED"
+    | "NETWORK_ERROR"
+    | "SERVER_ERROR"
+    | "SIGN_IN_FAILED"
+    | "CANCELLED";
   message: string;
 }
 
@@ -147,6 +155,19 @@ export interface MeResponse {
   me: {
     current_user: {
       data: PyloUser;
+    };
+  };
+}
+
+/**
+ * Login handoff redemption API response
+ */
+export interface LoginHandoffResponse {
+  redeemLoginHandoff: {
+    data: {
+      auth_token: string;
+      refresh_token: string;
+      redirect: string | null;
     };
   };
 }

@@ -5,6 +5,7 @@ import { PyloProvider as BaseProvider } from "@pylo/react";
 import type { PyloProviderProps as BaseProps } from "@pylo/react";
 import { createSecureStorage } from "./storage.js";
 import { subscribeAppStateToFocus } from "./app-state.js";
+import { openAuthSession, expoHandoffCrypto } from "./auth-session.js";
 
 export interface PyloProviderProps extends BaseProps {
   /**
@@ -16,7 +17,7 @@ export interface PyloProviderProps extends BaseProps {
   refetchOnAppFocus?: boolean;
 }
 
-/** `@pylo/react`'s provider with the keychain and app focus wired up. */
+/** `@pylo/react`'s provider with the keychain, system browser sign-in and app focus wired up. */
 export function PyloProvider({ refetchOnAppFocus = true, ...props }: PyloProviderProps) {
   const storage = useMemo(
     () => props.storage ?? createSecureStorage(),
@@ -28,5 +29,12 @@ export function PyloProvider({ refetchOnAppFocus = true, ...props }: PyloProvide
     return subscribeAppStateToFocus(AppState, focusManager);
   }, [refetchOnAppFocus]);
 
-  return <BaseProvider {...props} storage={storage} />;
+  return (
+    <BaseProvider
+      {...props}
+      storage={storage}
+      openAuthSession={props.openAuthSession ?? openAuthSession}
+      handoffCrypto={props.handoffCrypto ?? expoHandoffCrypto}
+    />
+  );
 }

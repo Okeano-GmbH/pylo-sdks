@@ -14,6 +14,8 @@ export type {
   LoginResponse,
   RefreshTokenResponse,
   MeResponse,
+  SocialProvider,
+  LoginHandoffResponse,
 } from "./types.js";
 
 // Token utilities
@@ -32,4 +34,20 @@ export {
 } from "./graphql.js";
 
 // Mutations
-export { LOGIN_MUTATION, REFRESH_TOKEN_MUTATION, ME_QUERY } from "./mutations.js";
+export {
+  LOGIN_MUTATION,
+  REFRESH_TOKEN_MUTATION,
+  REDEEM_LOGIN_HANDOFF_MUTATION,
+  ME_QUERY,
+} from "./mutations.js";
+
+// Social sign-in handoff
+export type { HandoffCrypto } from "./handoff.js";
+export {
+  webHandoffCrypto,
+  createHandoffVerifier,
+  createHandoffChallenge,
+  buildSocialStartUrl,
+  parseHandoffCallback,
+  safeRedirectPath,
+} from "./handoff.js";

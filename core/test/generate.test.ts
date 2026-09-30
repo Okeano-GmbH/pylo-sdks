@@ -368,6 +368,50 @@ describe("generateIndexFile — schema registration", () => {
   });
 });
 
+describe("generateIndexFile — social sign-in", () => {
+  const social = {
+    providers: ["google"],
+    returnUrls: ["https://shop.example.com/cb", "myapp://auth"],
+  };
+
+  it("emits the providers and return URLs and registers them", () => {
+    const out = generateIndexFile(analyzeEntities([contact]), "@pylo/react", [], social);
+    expect(out).toContain('export const socialProviders = ["google"] as const;');
+    expect(out).toContain(
+      'export const socialReturnUrls = ["https://shop.example.com/cb","myapp://auth"] as const;',
+    );
+
+    const register = out.slice(out.indexOf("interface PyloRegister"));
+    expect(register).toContain("socialProvider: (typeof socialProviders)[number];");
+    expect(register).toContain("socialReturnUrl: (typeof socialReturnUrls)[number];");
+  });
+
+  it("emits none of it without bindings", () => {
+    const out = generateIndexFile(analyzeEntities([contact]), "@pylo/react");
+    expect(out).not.toContain("socialProvider");
+    expect(out).not.toContain("socialReturnUrl");
+  });
+
+  it("registers empty lists when the app has no enabled provider", () => {
+    const out = generateIndexFile(analyzeEntities([contact]), "@pylo/react", [], {
+      providers: [],
+      returnUrls: [],
+    });
+    expect(out).toContain("export const socialProviders = [] as const;");
+    expect(out).toContain("export const socialReturnUrls = [] as const;");
+    expect(out).toContain("socialProvider: (typeof socialProviders)[number];");
+    expect(out).toContain("socialReturnUrl: (typeof socialReturnUrls)[number];");
+  });
+
+  it("emits the constants but no register lines for @pylo/core", () => {
+    const out = generateIndexFile(analyzeEntities([contact]), "@pylo/core", [], social);
+    expect(out).toContain("export const socialProviders");
+    expect(out).toContain("export const socialReturnUrls");
+    expect(out).not.toContain("socialProvider:");
+    expect(out).not.toContain("socialReturnUrl:");
+  });
+});
+
 // `is_readable: false` means the backend's schema generator leaves the field off
 // the output type (GraphQLService: `if ($isOutputType && !$modelField->is_readable) continue;`),
 // so selecting it fails server-side. System entities report it for their

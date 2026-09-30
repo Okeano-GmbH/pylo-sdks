@@ -6,6 +6,9 @@ import type {
   EntitySelect,
   EntityResult,
 } from "@pylo/core";
+import type { SocialProvider } from "@pylo/auth";
+import { usePyloAuth as usePyloAuthUntyped } from "@pylo/react";
+import type { PyloAuth } from "@pylo/react";
 
 export type {
   QueryOperator,
@@ -138,8 +141,26 @@ export type PyloResult<
   Sel extends PyloSelect<E>,
 > = EntityResult<RegisteredSchema, E, Sel>;
 
+/** Providers `signInWith` accepts. Codegen narrows it to those enabled for the app. */
+export type RegisteredSocialProvider = PyloRegister extends {
+  socialProvider: infer P extends string;
+}
+  ? P
+  : SocialProvider;
+
+/** Return URLs `signInWith` accepts. Codegen narrows it to the app's allowlist. */
+export type RegisteredSocialReturnUrl = PyloRegister extends {
+  socialReturnUrl: infer U extends string;
+}
+  ? U
+  : string;
+
+export const usePyloAuth = usePyloAuthUntyped as () => PyloAuth<
+  RegisteredSocialProvider,
+  RegisteredSocialReturnUrl
+>;
+
 export {
-  usePyloAuth,
   usePyloClient,
   usePyloTransport,
   createLocalStorageAdapter,
@@ -150,6 +171,9 @@ export {
 } from "@pylo/react";
 export type {
   PyloAuth,
+  OpenAuthSession,
+  SocialSignIn,
+  SocialSignInResult,
   PyloStorage,
   SessionState,
   SessionStatus,
@@ -163,10 +187,11 @@ export type {
   StartUploadOptions,
   UploadHookResult,
 } from "@pylo/react";
-export type { PyloUser, AuthResult } from "@pylo/auth";
+export type { PyloUser, AuthResult, HandoffCrypto, SocialProvider } from "@pylo/auth";
 
 // Shadows the base provider so Expo apps get the keychain without passing one.
 export { PyloProvider } from "./provider.js";
 export type { PyloProviderProps } from "./provider.js";
 export { subscribeAppStateToFocus } from "./app-state.js";
 export { createSecureStorage } from "./storage.js";
+export { openAuthSession, expoHandoffCrypto } from "./auth-session.js";

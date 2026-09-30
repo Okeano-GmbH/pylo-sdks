@@ -32,3 +32,15 @@ export const ME_QUERY = `
     }
   }
 `;
+
+export const REDEEM_LOGIN_HANDOFF_MUTATION = `
+  mutation RedeemLoginHandoff($input: LoginHandoffRequest!) {
+    redeemLoginHandoff(input: $input) {
+      data {
+        auth_token
+        refresh_token
+        redirect
+      }
+    }
+  }
+`;

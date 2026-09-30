@@ -1,5 +1,6 @@
 import { ENTITY_CAPABILITY_NAMES } from "./analyze.js";
 import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
+import type { SocialBindings } from "./fetch-social.js";
 import type {
   AnalyzedDocumentTemplate,
   TemplateInput,
@@ -369,6 +370,7 @@ export function generateIndexFile(
   entities: AnalyzedEntity[],
   importSource: string,
   templates: AnalyzedDocumentTemplate[] = [],
+  social?: SocialBindings,
 ): string {
   const lines: string[] = [];
 
@@ -481,6 +483,16 @@ export function generateIndexFile(
     lines.push(...generateDocumentTemplatesType(templates, entities));
   }
 
+  // Empty lists are deliberate: they narrow `signInWith` to `never`, so an
+  // unbound provider is a type error.
+  if (social) {
+    lines.push(
+      `export const socialProviders = ${JSON.stringify(social.providers)} as const;`,
+      `export const socialReturnUrls = ${JSON.stringify(social.returnUrls)} as const;`,
+      "",
+    );
+  }
+
   // Register the schema so the typed client and the PyloSelect/PyloResult
   // helpers pick it up automatically (no hand-written `declare module`).
   if (REGISTERABLE_SOURCES.has(importSource)) {
@@ -491,6 +503,12 @@ export function generateIndexFile(
     );
     if (templates.length > 0) {
       lines.push("    documentTemplates: PyloDocumentTemplates;");
+    }
+    if (social) {
+      lines.push(
+        "    socialProvider: (typeof socialProviders)[number];",
+        "    socialReturnUrl: (typeof socialReturnUrls)[number];",
+      );
     }
     lines.push("  }", "}", "");
   }
