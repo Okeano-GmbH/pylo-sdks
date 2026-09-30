@@ -120,21 +120,21 @@ describe("fetchSocialBindingsWith", () => {
       throw new Error("ECONNREFUSED");
     };
     await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
-      "Failed to fetch sign-in providers for app app-1: ECONNREFUSED",
+      "Failed to fetch login providers for app app-1: ECONNREFUSED",
     );
   });
 
   it("throws with the GraphQL errors", async () => {
     const { request } = recorder(() => ({ errors: [{ message: "No permission" }] }));
     await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
-      "Failed to fetch sign-in providers for app app-1: No permission",
+      "Failed to fetch login providers for app app-1: No permission",
     );
   });
 
   it("throws with a general error", async () => {
     const { request } = recorder(() => ({ errors: { generalError: { message: "Unauthorized" } } }));
     await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
-      "Failed to fetch sign-in providers for app app-1: Unauthorized",
+      "Failed to fetch login providers for app app-1: Unauthorized",
     );
   });
 });

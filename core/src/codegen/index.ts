@@ -39,9 +39,9 @@ export async function generate(options?: GenerateOptions): Promise<void> {
 
   let social: SocialBindings | undefined;
   if (config.appId) {
-    console.log("Fetching sign-in providers...");
+    console.log("Fetching login providers...");
     social = await fetchSocialBindings({ ...config, appId: config.appId });
-    console.log(`  found ${social.providers.length} sign-in providers`);
+    console.log(`  found ${social.providers.length} login providers`);
   }
 
   console.log("Analyzing entities...");

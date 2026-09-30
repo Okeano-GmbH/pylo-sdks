@@ -141,14 +141,14 @@ export type PyloResult<
   Sel extends PyloSelect<E>,
 > = EntityResult<RegisteredSchema, E, Sel>;
 
-/** Providers `signInWith` accepts. Codegen narrows it to those enabled for the app. */
+/** Providers `loginWith` accepts. Codegen narrows it to those enabled for the app. */
 export type RegisteredSocialProvider = PyloRegister extends {
   socialProvider: infer P extends string;
 }
   ? P
   : SocialProvider;
 
-/** Return URLs `signInWith` accepts. Codegen narrows it to the app's allowlist. */
+/** Return URLs `loginWith` accepts. Codegen narrows it to the app's allowlist. */
 export type RegisteredSocialReturnUrl = PyloRegister extends {
   socialReturnUrl: infer U extends string;
 }
@@ -162,7 +162,7 @@ export const usePyloAuth = usePyloAuthUntyped as () => PyloAuth<
 
 export { PyloProvider, usePyloClient, usePyloTransport } from "./provider.js";
 export type { PyloProviderProps, PyloAuth } from "./provider.js";
-export type { OpenAuthSession, SocialSignIn, SocialSignInResult } from "./session/social.js";
+export type { OpenAuthSession, SocialLogin, SocialLoginResult } from "./session/social.js";
 export { createLocalStorageAdapter, createMemoryStorage } from "./session/storage.js";
 export type { PyloStorage } from "./session/storage.js";
 export { createSessionStore } from "./session/store.js";

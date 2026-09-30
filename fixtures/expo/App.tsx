@@ -6,7 +6,7 @@ import type { PyloSchema } from "./schema";
 const { usePyloList, usePyloUpload } = createPyloHooks<PyloSchema>();
 
 function Screen() {
-  const { isLoading, isSignedIn, user, login, logout } = usePyloAuth();
+  const { isLoading, isLoggedIn, user, login, logout } = usePyloAuth();
   const { data } = usePyloList("contact", { select: { id: true } });
   const { startUpload } = usePyloUpload();
 
@@ -20,8 +20,8 @@ function Screen() {
       <Text>{user?.email ?? String(data?.length ?? 0)}</Text>
       <Button title="upload" onPress={pick} />
       <Button
-        title={isSignedIn ? "sign out" : "sign in"}
-        onPress={() => void (isSignedIn ? logout() : login("a@b.c", "pw"))}
+        title={isLoggedIn ? "log out" : "log in"}
+        onPress={() => void (isLoggedIn ? logout() : login("a@b.c", "pw"))}
       />
     </View>
   );

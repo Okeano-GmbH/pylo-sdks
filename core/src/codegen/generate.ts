@@ -483,7 +483,7 @@ export function generateIndexFile(
     lines.push(...generateDocumentTemplatesType(templates, entities));
   }
 
-  // Empty lists are deliberate: they narrow `signInWith` to `never`, so an
+  // Empty lists are deliberate: they narrow `loginWith` to `never`, so an
   // unbound provider is a type error.
   if (social) {
     lines.push(

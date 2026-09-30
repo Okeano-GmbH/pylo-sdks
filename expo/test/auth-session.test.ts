@@ -37,7 +37,7 @@ describe("openAuthSession", () => {
   it("rejects when another auth session holds the browser", async () => {
     openAuthSessionAsync.mockResolvedValue({ type: "locked" });
     await expect(openAuthSession("https://idp/x", "myapp://auth")).rejects.toThrow(
-      "Another sign-in is already in progress",
+      "Another login is already in progress",
     );
   });
 

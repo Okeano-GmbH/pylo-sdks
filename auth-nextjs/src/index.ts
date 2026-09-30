@@ -34,5 +34,5 @@ export {
   getRefreshTokenCookieName,
 } from "./cookies.js";
 
-// Social sign-in route handlers
+// Social login route handlers
 export { createSocialStartRoute, createSocialCallbackRoute } from "./social.js";

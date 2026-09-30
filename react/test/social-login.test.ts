@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHandoffChallenge, webHandoffCrypto } from "@pylo/auth";
 import type { HandoffCrypto } from "@pylo/auth";
-import { createSocialSignIn } from "../src/session/social.js";
+import { createSocialLogin } from "../src/session/social.js";
 import type { SessionStore } from "../src/session/store.js";
 
 const VERIFIER_KEY = "pylo.handoff_verifier";
@@ -18,7 +18,7 @@ function setup(
   } = {},
 ) {
   const store = { redeemHandoff } as unknown as SessionStore;
-  return createSocialSignIn({
+  return createSocialLogin({
     endpoint: "https://api.test/graphql",
     appId: "app-1",
     keyPrefix: "pylo",
@@ -45,10 +45,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("signInWith on the web", () => {
+describe("loginWith on the web", () => {
   it("stores a verifier and navigates to the broker with its challenge", async () => {
     const social = setup();
-    void social.signInWith("google", { returnUrl: "https://app/auth", redirect: "/x" });
+    void social.loginWith("google", { returnUrl: "https://app/auth", redirect: "/x" });
     await vi.waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
 
     const verifier = session.get(VERIFIER_KEY);
@@ -64,13 +64,13 @@ describe("signInWith on the web", () => {
   });
 });
 
-describe("completeSignIn", () => {
+describe("completeLogin", () => {
   it("redeems the code with the stored verifier and cleans up", async () => {
     session.set(VERIFIER_KEY, "v1");
     vi.stubGlobal("location", { href: "https://app/auth?code=c", assign });
     const social = setup();
 
-    const result = await social.completeSignIn("https://app/auth?code=c");
+    const result = await social.completeLogin("https://app/auth?code=c");
 
     expect(redeemHandoff).toHaveBeenCalledWith("c", "v1");
     expect(result).toEqual({ success: true, redirect: "/x" });
@@ -82,7 +82,7 @@ describe("completeSignIn", () => {
     session.set(VERIFIER_KEY, "v1");
     vi.stubGlobal("location", { href: "https://app/auth?code=c&tab=1", assign });
 
-    await setup().completeSignIn();
+    await setup().completeLogin();
 
     expect(redeemHandoff).toHaveBeenCalledWith("c", "v1");
     expect(replaceState).toHaveBeenCalledWith(null, "", "https://app/auth?tab=1");
@@ -91,10 +91,10 @@ describe("completeSignIn", () => {
   it("fails without calling the API when the URL has no response", async () => {
     session.set(VERIFIER_KEY, "v1");
 
-    const result = await setup().completeSignIn("https://app/auth");
+    const result = await setup().completeLogin("https://app/auth");
 
     expect(result.success).toBe(false);
-    expect(result.error?.code).toBe("SIGN_IN_FAILED");
+    expect(result.error?.code).toBe("LOGIN_FAILED");
     expect(redeemHandoff).not.toHaveBeenCalled();
     expect(replaceState).not.toHaveBeenCalled();
   });
@@ -103,11 +103,11 @@ describe("completeSignIn", () => {
     session.set(VERIFIER_KEY, "v1");
     vi.stubGlobal("location", { href: "https://app/auth?error=Login%20failed", assign });
 
-    const result = await setup().completeSignIn("https://app/auth?error=Login%20failed");
+    const result = await setup().completeLogin("https://app/auth?error=Login%20failed");
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SIGN_IN_FAILED", message: "Login failed" },
+      error: { code: "LOGIN_FAILED", message: "Login failed" },
     });
     expect(redeemHandoff).not.toHaveBeenCalled();
     expect(session.has(VERIFIER_KEY)).toBe(false);
@@ -115,15 +115,15 @@ describe("completeSignIn", () => {
   });
 
   it("fails without calling the API when no verifier is stored", async () => {
-    const result = await setup().completeSignIn("https://app/auth?code=c");
+    const result = await setup().completeLogin("https://app/auth?code=c");
 
     expect(result.success).toBe(false);
-    expect(result.error?.code).toBe("SIGN_IN_FAILED");
+    expect(result.error?.code).toBe("LOGIN_FAILED");
     expect(redeemHandoff).not.toHaveBeenCalled();
   });
 });
 
-describe("completeSignIn robustness", () => {
+describe("completeLogin robustness", () => {
   const onReturnPage = (href: string) => {
     const loc = { href, assign };
     vi.stubGlobal("location", loc);
@@ -137,8 +137,8 @@ describe("completeSignIn robustness", () => {
     onReturnPage("https://app/auth?code=c");
     const social = setup();
 
-    const first = social.completeSignIn();
-    const second = social.completeSignIn();
+    const first = social.completeLogin();
+    const second = social.completeLogin();
 
     expect(await second).toBe(await first);
     expect(redeemHandoff).toHaveBeenCalledTimes(1);
@@ -149,13 +149,13 @@ describe("completeSignIn robustness", () => {
     session.set(VERIFIER_KEY, "v1");
     onReturnPage("https://app/auth?code=c");
     const social = setup();
-    await social.completeSignIn();
+    await social.completeLogin();
 
-    const result = await social.completeSignIn();
+    const result = await social.completeLogin();
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SIGN_IN_FAILED", message: "No sign-in response in this URL" },
+      error: { code: "LOGIN_FAILED", message: "No login response in this URL" },
     });
     expect(redeemHandoff).toHaveBeenCalledTimes(1);
   });
@@ -164,16 +164,16 @@ describe("completeSignIn robustness", () => {
     session.set(VERIFIER_KEY, "v1");
     redeemHandoff.mockRejectedValue(new Error("boom"));
 
-    const result = await setup().completeSignIn("https://app/auth?code=c");
+    const result = await setup().completeLogin("https://app/auth?code=c");
 
-    expect(result).toEqual({ success: false, error: { code: "SIGN_IN_FAILED", message: "boom" } });
+    expect(result).toEqual({ success: false, error: { code: "LOGIN_FAILED", message: "boom" } });
   });
 
   it("does not rewrite the address bar for a URL other than the current one", async () => {
     session.set(VERIFIER_KEY, "v1");
     vi.stubGlobal("location", { href: "https://app/elsewhere", assign });
 
-    const result = await setup().completeSignIn("https://app/auth?code=c");
+    const result = await setup().completeLogin("https://app/auth?code=c");
 
     expect(result.success).toBe(true);
     expect(replaceState).not.toHaveBeenCalled();
@@ -182,13 +182,13 @@ describe("completeSignIn robustness", () => {
   it("fails without touching storage or history when an auth session is configured", async () => {
     const social = setup({ openAuthSession: vi.fn() });
 
-    const result = await social.completeSignIn("myapp://auth?code=c");
+    const result = await social.completeLogin("myapp://auth?code=c");
 
     expect(result).toEqual({
       success: false,
       error: {
-        code: "SIGN_IN_FAILED",
-        message: "signInWith already completes the sign-in in this environment",
+        code: "LOGIN_FAILED",
+        message: "loginWith already completes the login in this environment",
       },
     });
     expect(sessionStorage.getItem).not.toHaveBeenCalled();
@@ -198,11 +198,11 @@ describe("completeSignIn robustness", () => {
   });
 });
 
-describe("signInWith through an auth session", () => {
+describe("loginWith through an auth session", () => {
   it("reports a dismissed session as cancelled", async () => {
     const social = setup({ openAuthSession: async () => null });
 
-    const result = await social.signInWith("google", { returnUrl: "myapp://auth" });
+    const result = await social.loginWith("google", { returnUrl: "myapp://auth" });
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("CANCELLED");
@@ -216,10 +216,10 @@ describe("signInWith through an auth session", () => {
       },
     });
 
-    const result = await social.signInWith("microsoft", { returnUrl: "myapp://auth" });
+    const result = await social.loginWith("microsoft", { returnUrl: "myapp://auth" });
 
     expect(result.success).toBe(false);
-    expect(result.error?.code).toBe("SIGN_IN_FAILED");
+    expect(result.error?.code).toBe("LOGIN_FAILED");
   });
 
   it("resolves a failure when the challenge cannot be computed", async () => {
@@ -233,11 +233,11 @@ describe("signInWith through an auth session", () => {
       },
     });
 
-    const result = await social.signInWith("google", { returnUrl: "myapp://auth" });
+    const result = await social.loginWith("google", { returnUrl: "myapp://auth" });
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SIGN_IN_FAILED", message: "SHA-256 unavailable" },
+      error: { code: "LOGIN_FAILED", message: "SHA-256 unavailable" },
     });
   });
 
@@ -245,7 +245,7 @@ describe("signInWith through an auth session", () => {
     const openAuthSession = vi.fn(async () => "myapp://auth?code=c");
     const social = setup({ openAuthSession });
 
-    const result = await social.signInWith("google", { returnUrl: "myapp://auth" });
+    const result = await social.loginWith("google", { returnUrl: "myapp://auth" });
 
     expect(result).toEqual({ success: true, redirect: "/x" });
     const [startUrl, returnUrl] = openAuthSession.mock.calls[0] as unknown as [string, string];

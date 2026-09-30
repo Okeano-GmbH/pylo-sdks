@@ -56,7 +56,7 @@ export interface AuthError {
     | "TOKEN_EXPIRED"
     | "NETWORK_ERROR"
     | "SERVER_ERROR"
-    | "SIGN_IN_FAILED"
+    | "LOGIN_FAILED"
     | "CANCELLED";
   message: string;
 }

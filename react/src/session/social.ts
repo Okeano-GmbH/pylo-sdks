@@ -7,24 +7,24 @@ import {
 import type { AuthResult, HandoffCrypto, SocialProvider } from "@pylo/auth";
 import type { SessionStore } from "./store.js";
 
-export type SocialSignInResult = AuthResult & { redirect?: string };
+export type SocialLoginResult = AuthResult & { redirect?: string };
 
 export type OpenAuthSession = (url: string, returnUrl: string) => Promise<string | null>;
 
-export interface SocialSignIn<P extends string = SocialProvider, U extends string = string> {
+export interface SocialLogin<P extends string = SocialProvider, U extends string = string> {
   /**
    * On the web this navigates away and never resolves; finish on the return page
-   * with `completeSignIn`. With `openAuthSession` it resolves once the session ends.
+   * with `completeLogin`. With `openAuthSession` it resolves once the session ends.
    */
-  signInWith(
+  loginWith(
     provider: P,
     options: { returnUrl: U; redirect?: string; invite?: string },
-  ): Promise<SocialSignInResult>;
-  /** Finishes a web sign-in from the return page's URL. */
-  completeSignIn(url?: string): Promise<SocialSignInResult>;
+  ): Promise<SocialLoginResult>;
+  /** Finishes a web login from the return page's URL. */
+  completeLogin(url?: string): Promise<SocialLoginResult>;
 }
 
-export interface SocialSignInOptions {
+export interface SocialLoginOptions {
   endpoint: string;
   appId: string;
   keyPrefix: string;
@@ -33,27 +33,27 @@ export interface SocialSignInOptions {
   crypto?: HandoffCrypto;
 }
 
-function failed(code: "SIGN_IN_FAILED" | "CANCELLED", message: string): SocialSignInResult {
+function failed(code: "LOGIN_FAILED" | "CANCELLED", message: string): SocialLoginResult {
   return { success: false, error: { code, message } };
 }
 
-export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
+export function createSocialLogin(o: SocialLoginOptions): SocialLogin {
   const verifierKey = `${o.keyPrefix}.handoff_verifier`;
-  let completing: Promise<SocialSignInResult> | null = null;
+  let completing: Promise<SocialLoginResult> | null = null;
 
   function redeem(
     parsed: ReturnType<typeof parseHandoffCallback>,
     verifier: string | null,
-  ): Promise<SocialSignInResult> | SocialSignInResult {
-    if (!parsed) return failed("SIGN_IN_FAILED", "No sign-in response in this URL");
-    if ("error" in parsed) return failed("SIGN_IN_FAILED", parsed.error);
+  ): Promise<SocialLoginResult> | SocialLoginResult {
+    if (!parsed) return failed("LOGIN_FAILED", "No login response in this URL");
+    if ("error" in parsed) return failed("LOGIN_FAILED", parsed.error);
     if (!verifier) {
-      return failed("SIGN_IN_FAILED", "No sign-in was started in this browser session");
+      return failed("LOGIN_FAILED", "No login was started in this browser session");
     }
     return o.store.redeemHandoff(parsed.code, verifier);
   }
 
-  async function finish(url: string): Promise<SocialSignInResult> {
+  async function finish(url: string): Promise<SocialLoginResult> {
     try {
       const verifier = sessionStorage.getItem(verifierKey);
       sessionStorage.removeItem(verifierKey);
@@ -69,12 +69,12 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
 
       return await redeem(parsed, verifier);
     } catch (error) {
-      return failed("SIGN_IN_FAILED", error instanceof Error ? error.message : "Sign-in failed");
+      return failed("LOGIN_FAILED", error instanceof Error ? error.message : "Login failed");
     }
   }
 
   return {
-    async signInWith(provider, { returnUrl, redirect, invite }) {
+    async loginWith(provider, { returnUrl, redirect, invite }) {
       let verifier: string;
       let startUrl: string;
       let finalUrl: string | null = null;
@@ -93,13 +93,13 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
         if (o.openAuthSession) finalUrl = await o.openAuthSession(startUrl, returnUrl);
       } catch (error) {
         return failed(
-          "SIGN_IN_FAILED",
-          error instanceof Error ? error.message : "Sign-in failed",
+          "LOGIN_FAILED",
+          error instanceof Error ? error.message : "Login failed",
         );
       }
 
       if (o.openAuthSession) {
-        if (finalUrl === null) return failed("CANCELLED", "Sign-in was cancelled");
+        if (finalUrl === null) return failed("CANCELLED", "Login was cancelled");
         return redeem(parseHandoffCallback(finalUrl), verifier);
       }
 
@@ -109,10 +109,10 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
       return new Promise<never>(() => {});
     },
 
-    completeSignIn(url) {
+    completeLogin(url) {
       if (o.openAuthSession) {
         return Promise.resolve(
-          failed("SIGN_IN_FAILED", "signInWith already completes the sign-in in this environment"),
+          failed("LOGIN_FAILED", "loginWith already completes the login in this environment"),
         );
       }
       // StrictMode runs effects twice; a second call must share the first's single-use verifier.

@@ -38,14 +38,14 @@ beforeEach(() => {
 });
 
 describe("init", () => {
-  it("starts loading and settles signed out with no stored token", async () => {
+  it("starts loading and settles logged out with no stored token", async () => {
     const store = createSessionStore(options());
     expect(store.getState().status).toBe("loading");
     await store.init();
-    expect(store.getState()).toEqual({ status: "signedOut", token: null });
+    expect(store.getState()).toEqual({ status: "loggedOut", token: null });
   });
 
-  it("settles signed in when storage holds a token", async () => {
+  it("settles logged in when storage holds a token", async () => {
     const storage = createMemoryStorage();
     const token = fresh();
     await storage.setItem("pylo.auth_token", token);
@@ -54,7 +54,7 @@ describe("init", () => {
     const store = createSessionStore({ ...options(), storage });
     await store.init();
 
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
   });
 
   it("namespaces its keys with the configured prefix", async () => {
@@ -68,7 +68,7 @@ describe("init", () => {
     expect(store.getState().token).toBe(token);
   });
 
-  it("settles signed out when storage cannot be read", async () => {
+  it("settles logged out when storage cannot be read", async () => {
     const storage = createMemoryStorage();
     storage.getItem = async () => {
       throw new Error("keystore locked");
@@ -77,7 +77,7 @@ describe("init", () => {
     const store = createSessionStore({ ...options(), storage });
     await store.init();
 
-    expect(store.getState()).toEqual({ status: "signedOut", token: null });
+    expect(store.getState()).toEqual({ status: "loggedOut", token: null });
   });
 
   it("reads storage once however often it is called", async () => {
@@ -106,29 +106,29 @@ describe("login", () => {
     const result = await store.login("a@b.c", "pw");
 
     expect(result.success).toBe(true);
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
   });
 
-  it("notifies onSignIn after a login but not after a refresh", async () => {
-    const onSignIn = vi.fn();
+  it("notifies onLogin after a login but not after a refresh", async () => {
+    const onLogin = vi.fn();
     graphqlRequest.mockResolvedValue({
       data: { login: { data: { auth_token: stale(), refresh_token: "r1" } } },
     });
 
-    const store = createSessionStore({ ...options(), onSignIn });
+    const store = createSessionStore({ ...options(), onLogin });
     await store.login("a@b.c", "pw");
-    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(onLogin).toHaveBeenCalledTimes(1);
 
     graphqlRequest.mockResolvedValue({
       data: { refreshToken: { data: { auth_token: fresh(), refresh_token: "r2" } } },
     });
     await store.getToken();
     expect(graphqlRequest).toHaveBeenCalledTimes(2);
-    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
-  it("reports failure without signing in", async () => {
+  it("reports failure without logging in", async () => {
     graphqlRequest.mockResolvedValue({
       errors: [{ message: "Bad credentials", extensions: { code: "UNAUTHENTICATED" } }],
     });
@@ -139,7 +139,7 @@ describe("login", () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("INVALID_CREDENTIALS");
-    expect(store.getState().status).toBe("signedOut");
+    expect(store.getState().status).toBe("loggedOut");
   });
 
   it("sends the app id when one is configured", async () => {
@@ -181,9 +181,9 @@ describe("redeemHandoff", () => {
   it("sends the code and verifier, stores both tokens and signs in", async () => {
     const token = fresh();
     graphqlRequest.mockResolvedValue(redeemed(token, "/x"));
-    const onSignIn = vi.fn();
+    const onLogin = vi.fn();
     const storage = createMemoryStorage();
-    const store = createSessionStore({ ...options(), storage, onSignIn });
+    const store = createSessionStore({ ...options(), storage, onLogin });
     await store.init();
 
     const result = await store.redeemHandoff("c", "v");
@@ -193,9 +193,9 @@ describe("redeemHandoff", () => {
       input: { code: "c", handoff_verifier: "v" },
     });
     expect(result).toMatchObject({ success: true, authToken: token, redirect: "/x" });
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
-    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
   it("drops a redirect that leaves the app", async () => {
@@ -213,25 +213,25 @@ describe("redeemHandoff", () => {
     const token = fresh();
     await storage.setItem("pylo.auth_token", token);
     await storage.setItem("pylo.refresh_token", "r1");
-    const onSignOut = vi.fn();
+    const onLogout = vi.fn();
     graphqlRequest.mockResolvedValue({
       errors: [{ message: "Invalid code", extensions: { code: "UNAUTHENTICATED" } }],
     });
 
-    const store = createSessionStore({ ...options(), storage, onSignOut });
+    const store = createSessionStore({ ...options(), storage, onLogout });
     await store.init();
     const result = await store.redeemHandoff("c", "v");
 
     expect(result.success).toBe(false);
-    expect(result.error?.code).toBe("SIGN_IN_FAILED");
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(result.error?.code).toBe("LOGIN_FAILED");
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
-    expect(onSignOut).not.toHaveBeenCalled();
+    expect(onLogout).not.toHaveBeenCalled();
   });
 });
 
 describe("redeemHandoff before init settles", () => {
-  it("stays signed in when slow storage finishes loading after the redeem", async () => {
+  it("stays logged in when slow storage finishes loading after the redeem", async () => {
     const memory = createMemoryStorage();
     const storage = {
       ...memory,
@@ -252,7 +252,7 @@ describe("redeemHandoff before init settles", () => {
     await store.init();
 
     expect(result.success).toBe(true);
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
   });
 });
 
@@ -262,20 +262,20 @@ describe("redeemHandoff network failure", () => {
     const token = fresh();
     await storage.setItem("pylo.auth_token", token);
     await storage.setItem("pylo.refresh_token", "r1");
-    const onSignOut = vi.fn();
+    const onLogout = vi.fn();
     graphqlRequest.mockRejectedValue(new TypeError("Failed to fetch"));
 
-    const store = createSessionStore({ ...options(), storage, onSignOut });
+    const store = createSessionStore({ ...options(), storage, onLogout });
     await store.init();
     const result = await store.redeemHandoff("c", "v");
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SIGN_IN_FAILED", message: "Failed to fetch" },
+      error: { code: "LOGIN_FAILED", message: "Failed to fetch" },
     });
-    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(store.getState()).toEqual({ status: "loggedIn", token });
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
-    expect(onSignOut).not.toHaveBeenCalled();
+    expect(onLogout).not.toHaveBeenCalled();
   });
 });
 
@@ -337,7 +337,7 @@ describe("getToken", () => {
     expect(store.getState().status).toBe("loading");
 
     await expect(store.getToken()).resolves.toBe(token);
-    expect(store.getState().status).toBe("signedIn");
+    expect(store.getState().status).toBe("loggedIn");
   });
 
   it("returns null when there is no session", async () => {
@@ -353,38 +353,38 @@ describe("refresh failure", () => {
     const storage = createMemoryStorage();
     await storage.setItem("pylo.auth_token", stale());
     await storage.setItem("pylo.refresh_token", "r1");
-    const onSignOut = vi.fn();
+    const onLogout = vi.fn();
 
     graphqlRequest.mockResolvedValue({
       errors: [{ message: "Invalid token", extensions: { code: "UNAUTHENTICATED" } }],
     });
 
-    const store = createSessionStore({ ...options(), storage, onSignOut });
+    const store = createSessionStore({ ...options(), storage, onLogout });
     await store.init();
     await store.getToken();
 
-    expect(store.getState()).toEqual({ status: "signedOut", token: null });
+    expect(store.getState()).toEqual({ status: "loggedOut", token: null });
     expect(await storage.getItem("pylo.refresh_token")).toBeNull();
-    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the session on a transient server error", async () => {
     const storage = createMemoryStorage();
     await storage.setItem("pylo.auth_token", stale());
     await storage.setItem("pylo.refresh_token", "r1");
-    const onSignOut = vi.fn();
+    const onLogout = vi.fn();
 
     graphqlRequest.mockResolvedValue({
       errors: [{ message: "boom", extensions: { code: "INTERNAL_SERVER_ERROR" } }],
     });
 
-    const store = createSessionStore({ ...options(), storage, onSignOut });
+    const store = createSessionStore({ ...options(), storage, onLogout });
     await store.init();
     await store.getToken();
 
-    expect(store.getState().status).toBe("signedIn");
+    expect(store.getState().status).toBe("loggedIn");
     expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
-    expect(onSignOut).not.toHaveBeenCalled();
+    expect(onLogout).not.toHaveBeenCalled();
   });
 
   it("signs out when a stored session has no refresh token", async () => {
@@ -395,15 +395,15 @@ describe("refresh failure", () => {
     await store.init();
 
     expect(await store.getToken()).toBeNull();
-    expect(store.getState().status).toBe("signedOut");
+    expect(store.getState().status).toBe("loggedOut");
     expect(graphqlRequest).not.toHaveBeenCalled();
   });
 });
 
-describe("refresh while signed out", () => {
+describe("refresh while logged out", () => {
   it("returns null without touching storage, state or the cache", async () => {
-    const onSignOut = vi.fn();
-    const store = createSessionStore({ ...options(), onSignOut });
+    const onLogout = vi.fn();
+    const store = createSessionStore({ ...options(), onLogout });
     await store.init();
     const listener = vi.fn();
     store.subscribe(listener);
@@ -411,9 +411,9 @@ describe("refresh while signed out", () => {
     expect(await store.refresh()).toBeNull();
 
     expect(graphqlRequest).not.toHaveBeenCalled();
-    expect(onSignOut).not.toHaveBeenCalled();
+    expect(onLogout).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
-    expect(store.getState().status).toBe("signedOut");
+    expect(store.getState().status).toBe("loggedOut");
   });
 });
 
@@ -422,15 +422,15 @@ describe("logout", () => {
     const storage = createMemoryStorage();
     await storage.setItem("pylo.auth_token", fresh());
     await storage.setItem("pylo.refresh_token", "r1");
-    const onSignOut = vi.fn();
+    const onLogout = vi.fn();
 
-    const store = createSessionStore({ ...options(), storage, onSignOut });
+    const store = createSessionStore({ ...options(), storage, onLogout });
     await store.init();
     await store.logout();
 
-    expect(store.getState()).toEqual({ status: "signedOut", token: null });
+    expect(store.getState()).toEqual({ status: "loggedOut", token: null });
     expect(await storage.getItem("pylo.auth_token")).toBeNull();
-    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });
 
