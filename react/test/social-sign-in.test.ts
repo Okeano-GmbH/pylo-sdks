@@ -101,13 +101,13 @@ describe("completeSignIn", () => {
 
   it("reports the broker's error", async () => {
     session.set(VERIFIER_KEY, "v1");
-    vi.stubGlobal("location", { href: "https://app/auth?error=Login%20failed", assign });
+    vi.stubGlobal("location", { href: "https://app/auth?error=Sign-in%20failed", assign });
 
-    const result = await setup().completeSignIn("https://app/auth?error=Login%20failed");
+    const result = await setup().completeSignIn("https://app/auth?error=Sign-in%20failed");
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SIGN_IN_FAILED", message: "Login failed" },
+      error: { code: "SIGN_IN_FAILED", message: "Sign-in failed" },
     });
     expect(redeemHandoff).not.toHaveBeenCalled();
     expect(session.has(VERIFIER_KEY)).toBe(false);

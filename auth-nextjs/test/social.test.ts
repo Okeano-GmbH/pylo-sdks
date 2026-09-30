@@ -161,9 +161,9 @@ describe("social callback route", () => {
   });
 
   it("forwards a provider error to the login page without calling the API", async () => {
-    const res = await callback("?error=Login+failed", { verifier: "ver" });
+    const res = await callback("?error=Sign-in+failed", { verifier: "ver" });
     expect(graphqlRequest).not.toHaveBeenCalled();
-    expect(res.headers.get("location")).toBe("https://app.test/auth/login?error=Login+failed");
+    expect(res.headers.get("location")).toBe("https://app.test/auth/login?error=Sign-in+failed");
     expectVerifierDeleted(res);
   });
 

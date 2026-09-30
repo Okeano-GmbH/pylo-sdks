@@ -85,7 +85,7 @@ export function createSocialCallbackRoute(o: { loginPath?: string } = {}) {
 
     const result = parseHandoffCallback(req.url);
     if (result && "error" in result) return fail(result.error);
-    if (!result || !verifier) return fail("Login failed");
+    if (!result || !verifier) return fail("Sign-in failed");
 
     try {
       const response = await graphqlRequest<LoginHandoffResponse>(
@@ -93,15 +93,15 @@ export function createSocialCallbackRoute(o: { loginPath?: string } = {}) {
         REDEEM_LOGIN_HANDOFF_MUTATION,
         { input: { code: result.code, handoff_verifier: verifier } },
       );
-      if (hasErrors(response)) return fail(extractErrorMessage(response.errors) ?? "Login failed");
-      if (!response.data) return fail("Login failed");
+      if (hasErrors(response)) return fail(extractErrorMessage(response.errors) ?? "Sign-in failed");
+      if (!response.data) return fail("Sign-in failed");
 
       const { auth_token, refresh_token, redirect } = response.data.redeemLoginHandoff.data;
       const res = NextResponse.redirect(new URL(safeRedirectPath(redirect) ?? "/", appOrigin(req)), 302);
       setAuthCookiesOnResponse(res, auth_token, refresh_token);
       return done(res);
     } catch {
-      return fail("Login failed");
+      return fail("Sign-in failed");
     }
   };
 }

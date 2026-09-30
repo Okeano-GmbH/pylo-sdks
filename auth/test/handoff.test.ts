@@ -69,7 +69,7 @@ describe("handoff", () => {
   it.each([
     ["https://app/auth?code=k", { code: "k" }],
     ["https://app/auth?tab=x&code=k", { code: "k" }],
-    ["myapp://auth?error=Login%20failed", { error: "Login failed" }],
+    ["myapp://auth?error=Sign-in%20failed", { error: "Sign-in failed" }],
     ["https://app/auth?code=k&error=denied", { error: "denied" }],
     ["https://app/auth", null],
   ])("parses %s", (url, expected) => expect(parseHandoffCallback(url)).toEqual(expected));

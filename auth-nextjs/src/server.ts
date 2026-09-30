@@ -154,7 +154,7 @@ export async function login(email: string, password: string): Promise<AuthResult
   );
 
   if (hasErrors(response)) {
-    const message = extractErrorMessage(response.errors) ?? "Login failed";
+    const message = extractErrorMessage(response.errors) ?? "Sign-in failed";
     return {
       success: false,
       error: { code: "INVALID_CREDENTIALS", message },

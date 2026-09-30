@@ -190,7 +190,7 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
           success: false,
           error: {
             code: "INVALID_CREDENTIALS",
-            message: extractErrorMessage(response.errors) ?? "Login failed",
+            message: extractErrorMessage(response.errors) ?? "Sign-in failed",
           },
         };
       }
