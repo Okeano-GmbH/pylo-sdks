@@ -209,6 +209,8 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     },
 
     async redeemHandoff(code, verifier) {
+      // A slow init landing after persist would revert the new session to signedOut.
+      await init();
       let response: GraphQLResponse<LoginHandoffResponse>;
       try {
         response = await graphqlRequest<LoginHandoffResponse>(

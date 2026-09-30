@@ -230,6 +230,32 @@ describe("redeemHandoff", () => {
   });
 });
 
+describe("redeemHandoff before init settles", () => {
+  it("stays signed in when slow storage finishes loading after the redeem", async () => {
+    const memory = createMemoryStorage();
+    const storage = {
+      ...memory,
+      getItem: async (key: string) => {
+        const value = await memory.getItem(key);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return value;
+      },
+    };
+    const token = fresh();
+    graphqlRequest.mockResolvedValue({
+      data: { redeemLoginHandoff: { data: { auth_token: token, refresh_token: "r1", redirect: null } } },
+    });
+
+    const store = createSessionStore({ ...options(), storage });
+    void store.init();
+    const result = await store.redeemHandoff("c", "v");
+    await store.init();
+
+    expect(result.success).toBe(true);
+    expect(store.getState()).toEqual({ status: "signedIn", token });
+  });
+});
+
 describe("redeemHandoff network failure", () => {
   it("resolves a failure and keeps the existing session", async () => {
     const storage = createMemoryStorage();
