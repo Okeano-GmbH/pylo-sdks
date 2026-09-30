@@ -87,11 +87,54 @@ describe("fetchSocialBindingsWith", () => {
     expect(result.providers).toEqual(["google"]);
   });
 
-  it("returns nothing, rather than throwing, when the backend refuses", async () => {
-    const { request } = recorder(() => ({ errors: [{ message: "No permission" }] }));
+  it("skips a binding whose provider is not readable", async () => {
+    const { request } = recorder(() =>
+      page([
+        { return_urls: '["https://hidden.example.com/cb"]', is_enabled: true, pylo_auth_provider: null },
+        binding("google", ["https://a.example.com/cb"]),
+      ]),
+    );
+
     await expect(fetchSocialBindingsWith(request, "app-1")).resolves.toEqual({
-      providers: [],
+      providers: ["google"],
+      returnUrls: ["https://a.example.com/cb"],
+    });
+  });
+
+  it("ignores return URLs that are not a JSON list", async () => {
+    const { request } = recorder(() =>
+      page([
+        { ...binding("google", []), return_urls: "not json" },
+        { ...binding("microsoft", []), return_urls: '{"url":"https://x.example.com"}' },
+      ]),
+    );
+
+    await expect(fetchSocialBindingsWith(request, "app-1")).resolves.toEqual({
+      providers: ["google", "microsoft"],
       returnUrls: [],
     });
+  });
+
+  it("throws with the app id when the request fails", async () => {
+    const request = async () => {
+      throw new Error("ECONNREFUSED");
+    };
+    await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
+      "Failed to fetch sign-in providers for app app-1: ECONNREFUSED",
+    );
+  });
+
+  it("throws with the GraphQL errors", async () => {
+    const { request } = recorder(() => ({ errors: [{ message: "No permission" }] }));
+    await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
+      "Failed to fetch sign-in providers for app app-1: No permission",
+    );
+  });
+
+  it("throws with a general error", async () => {
+    const { request } = recorder(() => ({ errors: { generalError: { message: "Unauthorized" } } }));
+    await expect(fetchSocialBindingsWith(request, "app-1")).rejects.toThrow(
+      "Failed to fetch sign-in providers for app app-1: Unauthorized",
+    );
   });
 });

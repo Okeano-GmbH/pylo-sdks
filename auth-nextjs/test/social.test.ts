@@ -3,10 +3,12 @@ import { NextRequest } from "next/server.js";
 
 const graphqlRequest = vi.fn();
 const jar = new Map<string, string>();
-const del = vi.fn((_arg: unknown) => {});
-const set = vi.fn((name: string, value: string, _opts?: Record<string, unknown>) => {
-  jar.set(name, value);
-});
+const del = vi.fn<(arg: unknown) => void>();
+const set = vi.fn<(name: string, value: string, opts?: Record<string, unknown>) => void>(
+  (name, value) => {
+    jar.set(name, value);
+  },
+);
 
 vi.mock("next/headers.js", () => ({
   cookies: async () => ({

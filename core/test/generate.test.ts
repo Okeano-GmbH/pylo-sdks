@@ -392,14 +392,15 @@ describe("generateIndexFile — social sign-in", () => {
     expect(out).not.toContain("socialReturnUrl");
   });
 
-  // `never` would make `signInWith` uncallable, so an app with nothing enabled stays loosely typed.
-  it("emits none of it when no provider is enabled", () => {
+  it("registers empty lists when the app has no enabled provider", () => {
     const out = generateIndexFile(analyzeEntities([contact]), "@pylo/react", [], {
       providers: [],
       returnUrls: [],
     });
-    expect(out).not.toContain("socialProvider");
-    expect(out).not.toContain("socialReturnUrl");
+    expect(out).toContain("export const socialProviders = [] as const;");
+    expect(out).toContain("export const socialReturnUrls = [] as const;");
+    expect(out).toContain("socialProvider: (typeof socialProviders)[number];");
+    expect(out).toContain("socialReturnUrl: (typeof socialReturnUrls)[number];");
   });
 
   it("emits the constants but no register lines for @pylo/core", () => {

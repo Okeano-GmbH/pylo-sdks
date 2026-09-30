@@ -483,17 +483,14 @@ export function generateIndexFile(
     lines.push(...generateDocumentTemplatesType(templates, entities));
   }
 
-  // An empty list would register `never` and make `signInWith` uncallable.
-  const socialProviders = social?.providers ?? [];
-  const socialReturnUrls = social?.returnUrls ?? [];
-  if (socialProviders.length > 0) {
-    lines.push(`export const socialProviders = ${JSON.stringify(socialProviders)} as const;`);
-  }
-  if (socialReturnUrls.length > 0) {
-    lines.push(`export const socialReturnUrls = ${JSON.stringify(socialReturnUrls)} as const;`);
-  }
-  if (socialProviders.length > 0 || socialReturnUrls.length > 0) {
-    lines.push("");
+  // Empty lists are deliberate: they narrow `signInWith` to `never`, so an
+  // unbound provider is a type error.
+  if (social) {
+    lines.push(
+      `export const socialProviders = ${JSON.stringify(social.providers)} as const;`,
+      `export const socialReturnUrls = ${JSON.stringify(social.returnUrls)} as const;`,
+      "",
+    );
   }
 
   // Register the schema so the typed client and the PyloSelect/PyloResult
@@ -507,11 +504,11 @@ export function generateIndexFile(
     if (templates.length > 0) {
       lines.push("    documentTemplates: PyloDocumentTemplates;");
     }
-    if (socialProviders.length > 0) {
-      lines.push("    socialProvider: (typeof socialProviders)[number];");
-    }
-    if (socialReturnUrls.length > 0) {
-      lines.push("    socialReturnUrl: (typeof socialReturnUrls)[number];");
+    if (social) {
+      lines.push(
+        "    socialProvider: (typeof socialProviders)[number];",
+        "    socialReturnUrl: (typeof socialReturnUrls)[number];",
+      );
     }
     lines.push("  }", "}", "");
   }

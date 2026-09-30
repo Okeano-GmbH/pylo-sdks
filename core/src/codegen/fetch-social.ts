@@ -41,6 +41,10 @@ interface SocialBindingListResponse {
   };
 }
 
+function socialFetchError(appId: string, message: string): Error {
+  return new Error(`Failed to fetch sign-in providers for app ${appId}: ${message}`);
+}
+
 export interface SocialBindings {
   providers: string[];
   returnUrls: string[];
@@ -59,9 +63,8 @@ function parseReturnUrls(value: RawSocialBinding["return_urls"]): string[] {
 
 /**
  * Read the sign-in providers enabled for one app and the return URLs they
- * allow. Like the template fetch this never throws: a backend without the
- * entity, or a key that cannot read it, yields empty lists and a warning, and
- * codegen then leaves `signInWith` loosely typed.
+ * allow. Unlike the template fetch this throws: `appId` is an explicit opt-in
+ * to narrowing, so silently falling back to wide types would defeat it.
  */
 export async function fetchSocialBindingsWith(
   request: SchemaFetcher,
@@ -83,18 +86,14 @@ export async function fetchSocialBindingsWith(
         pagination: { page, per_page: 50 },
       });
     } catch (err) {
-      console.warn(
-        `  skipping sign-in providers: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return { providers: [], returnUrls: [] };
+      throw socialFetchError(appId, err instanceof Error ? err.message : String(err));
     }
 
     if (response.errors || !response.data?.pyloAppAuthProviderList) {
       const message = Array.isArray(response.errors)
         ? response.errors.map((e) => e.message).join(", ")
         : response.errors?.generalError?.message ?? "endpoint unavailable";
-      console.warn(`  skipping sign-in providers: ${message}`);
-      return { providers: [], returnUrls: [] };
+      throw socialFetchError(appId, message);
     }
 
     const { data, pagination } = response.data.pyloAppAuthProviderList;
