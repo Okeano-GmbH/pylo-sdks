@@ -4,10 +4,17 @@ import {
   extractErrorMessage,
   isUnauthorizedError,
   shouldRefreshToken,
+  safeRedirectPath,
   LOGIN_MUTATION,
+  REDEEM_LOGIN_HANDOFF_MUTATION,
   REFRESH_TOKEN_MUTATION,
 } from "@pylo/auth";
-import type { AuthResult, LoginResponse, RefreshTokenResponse } from "@pylo/auth";
+import type {
+  AuthResult,
+  LoginHandoffResponse,
+  LoginResponse,
+  RefreshTokenResponse,
+} from "@pylo/auth";
 import type { PyloStorage } from "./storage.js";
 
 export type SessionStatus = "loading" | "signedIn" | "signedOut";
@@ -24,7 +31,7 @@ export interface SessionStoreOptions {
   /** Namespaces the storage keys, for apps holding more than one session. */
   keyPrefix?: string;
   onSignOut?: () => void;
-  /** Called after a successful login, not after a refresh. */
+  /** Called after a successful login or handoff, not after a refresh. */
   onSignIn?: () => void;
 }
 
@@ -37,6 +44,8 @@ export interface SessionStore {
   /** Forces a refresh regardless of expiry. Used after a rejected request. */
   refresh(): Promise<string | null>;
   login(email: string, password: string): Promise<AuthResult>;
+  /** Exchanges a social sign-in handoff code. A failure leaves any existing session intact. */
+  redeemHandoff(code: string, verifier: string): Promise<AuthResult & { redirect?: string }>;
   logout(): Promise<void>;
 }
 
@@ -61,6 +70,11 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     await options.storage.setItem(AUTH_KEY, auth);
     await options.storage.setItem(REFRESH_KEY, refresh);
     setState({ status: "signedIn", token: auth });
+  }
+
+  async function signIn(auth: string, refresh: string): Promise<void> {
+    await persist(auth, refresh);
+    options.onSignIn?.();
   }
 
   async function clear(): Promise<void> {
@@ -188,10 +202,38 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
       }
 
       const { auth_token, refresh_token } = response.data.login.data;
-      await persist(auth_token, refresh_token);
-      options.onSignIn?.();
+      await signIn(auth_token, refresh_token);
 
       return { success: true, authToken: auth_token, refreshToken: refresh_token };
+    },
+
+    async redeemHandoff(code, verifier) {
+      const response = await graphqlRequest<LoginHandoffResponse>(
+        options.endpoint,
+        REDEEM_LOGIN_HANDOFF_MUTATION,
+        { input: { code, handoff_verifier: verifier } },
+      );
+
+      if (hasErrors(response) || !response.data) {
+        return {
+          success: false,
+          error: {
+            code: "SIGN_IN_FAILED",
+            message: extractErrorMessage(response.errors) ?? "Sign-in failed",
+          },
+        };
+      }
+
+      const { auth_token, refresh_token, redirect } = response.data.redeemLoginHandoff.data;
+      await signIn(auth_token, refresh_token);
+      const safe = safeRedirectPath(redirect);
+
+      return {
+        success: true,
+        authToken: auth_token,
+        refreshToken: refresh_token,
+        ...(safe !== null ? { redirect: safe } : {}),
+      };
     },
 
     logout: clear,

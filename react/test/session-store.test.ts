@@ -9,6 +9,7 @@ vi.mock("@pylo/auth", async (importOriginal) => {
 
 const { createSessionStore } = await import("../src/session/store.js");
 const { createMemoryStorage } = await import("../src/session/storage.js");
+const { REDEEM_LOGIN_HANDOFF_MUTATION } = await import("@pylo/auth");
 
 function makeToken(payload: Record<string, unknown>): string {
   const b64 = (value: object) => btoa(JSON.stringify(value)).replace(/=+$/, "");
@@ -167,6 +168,65 @@ describe("login", () => {
     expect(graphqlRequest.mock.calls[0]?.[2]).toEqual({
       input: { email: "a@b.c", password: "pw" },
     });
+  });
+});
+
+describe("redeemHandoff", () => {
+  const redeemed = (token: string, redirect: string | null) => ({
+    data: {
+      redeemLoginHandoff: { data: { auth_token: token, refresh_token: "r1", redirect } },
+    },
+  });
+
+  it("sends the code and verifier, stores both tokens and signs in", async () => {
+    const token = fresh();
+    graphqlRequest.mockResolvedValue(redeemed(token, "/x"));
+    const onSignIn = vi.fn();
+    const storage = createMemoryStorage();
+    const store = createSessionStore({ ...options(), storage, onSignIn });
+    await store.init();
+
+    const result = await store.redeemHandoff("c", "v");
+
+    expect(graphqlRequest.mock.calls[0]?.[1]).toBe(REDEEM_LOGIN_HANDOFF_MUTATION);
+    expect(graphqlRequest.mock.calls[0]?.[2]).toEqual({
+      input: { code: "c", handoff_verifier: "v" },
+    });
+    expect(result).toMatchObject({ success: true, authToken: token, redirect: "/x" });
+    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a redirect that leaves the app", async () => {
+    graphqlRequest.mockResolvedValue(redeemed(fresh(), "//evil.com"));
+    const store = createSessionStore(options());
+
+    const result = await store.redeemHandoff("c", "v");
+
+    expect(result.success).toBe(true);
+    expect(result.redirect).toBeUndefined();
+  });
+
+  it("leaves an existing session alone when the code is rejected", async () => {
+    const storage = createMemoryStorage();
+    const token = fresh();
+    await storage.setItem("pylo.auth_token", token);
+    await storage.setItem("pylo.refresh_token", "r1");
+    const onSignOut = vi.fn();
+    graphqlRequest.mockResolvedValue({
+      errors: [{ message: "Invalid code", extensions: { code: "UNAUTHENTICATED" } }],
+    });
+
+    const store = createSessionStore({ ...options(), storage, onSignOut });
+    await store.init();
+    const result = await store.redeemHandoff("c", "v");
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe("SIGN_IN_FAILED");
+    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
+    expect(onSignOut).not.toHaveBeenCalled();
   });
 });
 
