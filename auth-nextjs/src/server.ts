@@ -17,7 +17,7 @@ import type { RequireAuthOptions } from "./types.js";
 import { NotAuthenticatedError } from "./types.js";
 import { getAuthToken, getRefreshToken, setAuthCookies, clearAuthCookies } from "./cookies.js";
 
-const getEndpoint = (): string =>
+export const getEndpoint = (): string =>
   process.env.PYLO_GRAPHQL_ENDPOINT ?? process.env.GRAPHQL_ENDPOINT ?? DEFAULT_GRAPHQL_ENDPOINT;
 
 /**
