@@ -67,7 +67,9 @@ export function safeRedirectPath(value: string | null | undefined): string | nul
   try {
     const url = new URL(value, PLACEHOLDER_ORIGIN);
     if (url.origin !== PLACEHOLDER_ORIGIN) return null;
-    return url.pathname + url.search + url.hash;
+    const path = url.pathname + url.search + url.hash;
+    // Dot-segment normalisation can leave a leading "//", which browsers read as protocol-relative.
+    return path.startsWith("//") ? null : path;
   } catch {
     return null;
   }

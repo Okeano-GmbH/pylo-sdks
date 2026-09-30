@@ -42,12 +42,13 @@ describe("handoff", () => {
     ["https://app/auth?code=k", { code: "k" }],
     ["https://app/auth?tab=x&code=k", { code: "k" }],
     ["myapp://auth?error=Login%20failed", { error: "Login failed" }],
+    ["https://app/auth?code=k&error=denied", { error: "denied" }],
     ["https://app/auth", null],
   ])("parses %s", (url, expected) => expect(parseHandoffCallback(url)).toEqual(expected));
 
   it.each(["/dash?x=1#h"])("keeps %s", (p) => expect(safeRedirectPath(p)).toBe(p));
 
-  it.each(["//evil.com", "/\\evil.com", "/\t/evil.com", "https://evil.com", "javascript:alert(1)", "dash", "", null])(
+  it.each(["//evil.com", "/.//evil.com", "/a/..//evil.com", "/%2e//evil.com", "/\\evil.com", "/\t/evil.com", "https://evil.com", "javascript:alert(1)", "dash", "", null])(
     "rejects %s",
     (p) => expect(safeRedirectPath(p)).toBeNull(),
   );
