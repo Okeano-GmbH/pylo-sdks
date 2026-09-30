@@ -1,15 +1,22 @@
-import * as Crypto from "expo-crypto";
-import * as WebBrowser from "expo-web-browser";
 import type { HandoffCrypto } from "@pylo/auth";
 import type { OpenAuthSession } from "@pylo/react";
 
+// Both modules call requireNativeModule on import, so they load only when sign-in runs.
+
 export const openAuthSession: OpenAuthSession = async (url, returnUrl) => {
+  const WebBrowser = await import("expo-web-browser");
   const result = await WebBrowser.openAuthSessionAsync(url, returnUrl);
-  return result.type === "success" ? result.url : null;
+  if (result.type === "success") return result.url;
+  if (result.type === WebBrowser.WebBrowserResultType.LOCKED) {
+    throw new Error("Another sign-in is already in progress");
+  }
+  return null;
 };
 
 export const expoHandoffCrypto: HandoffCrypto = {
-  randomBytes: (length) => Crypto.getRandomBytes(length),
-  sha256: (data) =>
-    Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, data as Uint8Array<ArrayBuffer>),
+  randomBytes: async (length) => (await import("expo-crypto")).getRandomBytes(length),
+  sha256: async (data) => {
+    const Crypto = await import("expo-crypto");
+    return Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, data as Uint8Array<ArrayBuffer>);
+  },
 };

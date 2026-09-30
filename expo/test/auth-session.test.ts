@@ -4,7 +4,10 @@ const openAuthSessionAsync = vi.fn();
 const digest = vi.fn();
 const getRandomBytes = vi.fn();
 
-vi.mock("expo-web-browser", () => ({ openAuthSessionAsync }));
+vi.mock("expo-web-browser", () => ({
+  openAuthSessionAsync,
+  WebBrowserResultType: { CANCEL: "cancel", DISMISS: "dismiss", LOCKED: "locked" },
+}));
 vi.mock("expo-crypto", () => ({
   digest,
   getRandomBytes,
@@ -31,6 +34,13 @@ describe("openAuthSession", () => {
     expect(await openAuthSession("https://idp/x", "myapp://auth")).toBeNull();
   });
 
+  it("rejects when another auth session holds the browser", async () => {
+    openAuthSessionAsync.mockResolvedValue({ type: "locked" });
+    await expect(openAuthSession("https://idp/x", "myapp://auth")).rejects.toThrow(
+      "Another sign-in is already in progress",
+    );
+  });
+
   it("rejects when the browser rejects", async () => {
     openAuthSessionAsync.mockRejectedValue(new Error("boom"));
     await expect(openAuthSession("https://idp/x", "myapp://auth")).rejects.toThrow("boom");
@@ -46,10 +56,10 @@ describe("expoHandoffCrypto", () => {
     expect(digest).toHaveBeenCalledWith("SHA-256", data);
   });
 
-  it("gets random bytes from expo-crypto", () => {
+  it("gets random bytes from expo-crypto", async () => {
     const bytes = new Uint8Array(32);
     getRandomBytes.mockReturnValue(bytes);
-    expect(expoHandoffCrypto.randomBytes(32)).toBe(bytes);
+    expect(await expoHandoffCrypto.randomBytes(32)).toBe(bytes);
     expect(getRandomBytes).toHaveBeenCalledWith(32);
   });
 });
