@@ -24,7 +24,7 @@ const verifierCookieName = (): string => `pylo_handoff_verifier_${getAppId()}`;
 export function createSocialStartRoute(o: { returnUrl?: string } = {}) {
   return async (
     req: NextRequest,
-    ctx: { params: Promise<{ provider: string }> },
+    ctx: { params: Promise<{ provider: string }> | { provider: string } },
   ): Promise<NextResponse> => {
     const { provider } = await ctx.params;
     if (!PROVIDERS.includes(provider)) {
@@ -66,13 +66,16 @@ export function createSocialCallbackRoute(o: { loginPath?: string } = {}) {
   const loginPath = o.loginPath ?? "/auth/login";
 
   return async (req: NextRequest): Promise<NextResponse> => {
-    const fail = (message: string) =>
-      NextResponse.redirect(new URL(`${loginPath}?error=${encodeURIComponent(message)}`, req.url), 302);
+    const fail = (message: string) => {
+      const url = new URL(loginPath, req.url);
+      url.searchParams.set("error", message);
+      return NextResponse.redirect(url, 302);
+    };
 
     const jar = await cookies();
     const name = verifierCookieName();
     const verifier = jar.get(name)?.value;
-    jar.delete(name);
+    jar.delete({ name, path: CALLBACK_PATH });
 
     const result = parseHandoffCallback(req.url);
     if (result && "error" in result) return fail(result.error);
