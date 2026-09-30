@@ -17,7 +17,7 @@ export interface PyloProviderProps extends BaseProps {
   refetchOnAppFocus?: boolean;
 }
 
-/** `@pylo/react`'s provider with the keychain, system browser sign-in and app focus wired up. */
+/** `@pylo/react`'s provider with the keychain, system browser login and app focus wired up. */
 export function PyloProvider({ refetchOnAppFocus = true, ...props }: PyloProviderProps) {
   const storage = useMemo(
     () => props.storage ?? createSecureStorage(),

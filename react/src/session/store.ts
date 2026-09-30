@@ -18,7 +18,7 @@ import type {
 } from "@pylo/auth";
 import type { PyloStorage } from "./storage.js";
 
-export type SessionStatus = "loading" | "signedIn" | "signedOut";
+export type SessionStatus = "loading" | "loggedIn" | "loggedOut";
 
 export interface SessionState {
   status: SessionStatus;
@@ -31,9 +31,9 @@ export interface SessionStoreOptions {
   appId?: string;
   /** Namespaces the storage keys, for apps holding more than one session. */
   keyPrefix?: string;
-  onSignOut?: () => void;
+  onLogout?: () => void;
   /** Called after a successful login or handoff, not after a refresh. */
-  onSignIn?: () => void;
+  onLogin?: () => void;
 }
 
 export interface SessionStore {
@@ -45,7 +45,7 @@ export interface SessionStore {
   /** Forces a refresh regardless of expiry. Used after a rejected request. */
   refresh(): Promise<string | null>;
   login(email: string, password: string): Promise<AuthResult>;
-  /** Exchanges a social sign-in handoff code. A failure leaves any existing session intact. */
+  /** Exchanges a social login handoff code. A failure leaves any existing session intact. */
   redeemHandoff(code: string, verifier: string): Promise<AuthResult & { redirect?: string }>;
   logout(): Promise<void>;
 }
@@ -70,20 +70,20 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     refreshToken = refresh;
     await options.storage.setItem(AUTH_KEY, auth);
     await options.storage.setItem(REFRESH_KEY, refresh);
-    setState({ status: "signedIn", token: auth });
+    setState({ status: "loggedIn", token: auth });
   }
 
-  async function signIn(auth: string, refresh: string): Promise<void> {
+  async function startSession(auth: string, refresh: string): Promise<void> {
     await persist(auth, refresh);
-    options.onSignIn?.();
+    options.onLogin?.();
   }
 
   async function clear(): Promise<void> {
     refreshToken = null;
     await options.storage.removeItem(AUTH_KEY);
     await options.storage.removeItem(REFRESH_KEY);
-    setState({ status: "signedOut", token: null });
-    options.onSignOut?.();
+    setState({ status: "loggedOut", token: null });
+    options.onLogout?.();
   }
 
   async function runRefresh(): Promise<string | null> {
@@ -91,7 +91,7 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     // Nothing to refresh when there is no session. Clearing here would wipe the
     // query cache and re-render every consumer for a request that never carried
     // a token, and each re-render would send it again.
-    if (state.status !== "signedIn") return null;
+    if (state.status !== "loggedIn") return null;
     if (!refreshToken) {
       await clear();
       return null;
@@ -129,14 +129,14 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
         refreshToken = stored;
         setState(
           auth
-            ? { status: "signedIn", token: auth }
-            : { status: "signedOut", token: null },
+            ? { status: "loggedIn", token: auth }
+            : { status: "loggedOut", token: null },
         );
       } catch {
         // An unreadable store (SecureStore on a locked device, a blocked
         // localStorage) must not leave the app on its spinner forever.
         refreshToken = null;
-        setState({ status: "signedOut", token: null });
+        setState({ status: "loggedOut", token: null });
       }
     })();
     return ready;
@@ -203,13 +203,13 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
       }
 
       const { auth_token, refresh_token } = response.data.login.data;
-      await signIn(auth_token, refresh_token);
+      await startSession(auth_token, refresh_token);
 
       return { success: true, authToken: auth_token, refreshToken: refresh_token };
     },
 
     async redeemHandoff(code, verifier) {
-      // A slow init landing after persist would revert the new session to signedOut.
+      // A slow init landing after persist would revert the new session to loggedOut.
       await init();
       let response: GraphQLResponse<LoginHandoffResponse>;
       try {
@@ -222,8 +222,8 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
         return {
           success: false,
           error: {
-            code: "SIGN_IN_FAILED",
-            message: error instanceof Error ? error.message : "Sign-in failed",
+            code: "LOGIN_FAILED",
+            message: error instanceof Error ? error.message : "Login failed",
           },
         };
       }
@@ -232,14 +232,14 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
         return {
           success: false,
           error: {
-            code: "SIGN_IN_FAILED",
-            message: extractErrorMessage(response.errors) ?? "Sign-in failed",
+            code: "LOGIN_FAILED",
+            message: extractErrorMessage(response.errors) ?? "Login failed",
           },
         };
       }
 
       const { auth_token, refresh_token, redirect } = response.data.redeemLoginHandoff.data;
-      await signIn(auth_token, refresh_token);
+      await startSession(auth_token, refresh_token);
       const safe = safeRedirectPath(redirect);
 
       return {

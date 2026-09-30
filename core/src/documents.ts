@@ -1,4 +1,4 @@
-// Rendering documents from the templates a tenant designed in the admin panel.
+// Rendering documents from the templates a tenant delogged in the admin panel.
 // The template's `input_schema` is what codegen turns into `PyloDocumentTemplates`,
 // so the variables passed here are checked against the template the key names.
 

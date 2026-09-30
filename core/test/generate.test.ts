@@ -368,7 +368,7 @@ describe("generateIndexFile — schema registration", () => {
   });
 });
 
-describe("generateIndexFile — social sign-in", () => {
+describe("generateIndexFile — social login", () => {
   const social = {
     providers: ["google"],
     returnUrls: ["https://shop.example.com/cb", "myapp://auth"],

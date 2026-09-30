@@ -1,14 +1,14 @@
 import type { HandoffCrypto } from "@pylo/auth";
 import type { OpenAuthSession } from "@pylo/react";
 
-// Both modules call requireNativeModule on import, so they load only when sign-in runs.
+// Both modules call requireNativeModule on import, so they load only when login runs.
 
 export const openAuthSession: OpenAuthSession = async (url, returnUrl) => {
   const WebBrowser = await import("expo-web-browser");
   const result = await WebBrowser.openAuthSessionAsync(url, returnUrl);
   if (result.type === "success") return result.url;
   if (result.type === WebBrowser.WebBrowserResultType.LOCKED) {
-    throw new Error("Another sign-in is already in progress");
+    throw new Error("Another login is already in progress");
   }
   return null;
 };

@@ -42,7 +42,7 @@ interface SocialBindingListResponse {
 }
 
 function socialFetchError(appId: string, message: string): Error {
-  return new Error(`Failed to fetch sign-in providers for app ${appId}: ${message}`);
+  return new Error(`Failed to fetch login providers for app ${appId}: ${message}`);
 }
 
 export interface SocialBindings {
@@ -62,7 +62,7 @@ function parseReturnUrls(value: RawSocialBinding["return_urls"]): string[] {
 }
 
 /**
- * Read the sign-in providers enabled for one app and the return URLs they
+ * Read the login providers enabled for one app and the return URLs they
  * allow. Unlike the template fetch this throws: `appId` is an explicit opt-in
  * to narrowing, so silently falling back to wide types would defeat it.
  */

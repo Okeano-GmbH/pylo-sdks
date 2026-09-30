@@ -41,7 +41,7 @@ export {
   ME_QUERY,
 } from "./mutations.js";
 
-// Social sign-in handoff
+// Social login handoff
 export type { HandoffCrypto } from "./handoff.js";
 export {
   webHandoffCrypto,

@@ -8,7 +8,7 @@ export interface PyloConfig {
   endpoint?: string;
   apiKey: string;
   output?: string;
-  /** The Pylo app whose sign-in providers and return URLs `signInWith` is narrowed to. */
+  /** The Pylo app whose login providers and return URLs `loginWith` is narrowed to. */
   appId?: string;
 }
 

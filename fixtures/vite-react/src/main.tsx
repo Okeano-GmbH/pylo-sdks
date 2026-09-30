@@ -12,7 +12,7 @@ import type { PyloSchema } from "./schema";
 const { usePyloList, usePyloUpload } = createPyloHooks<PyloSchema>();
 
 function Screen() {
-  const { isLoading, isSignedIn, user, login, logout } = usePyloAuth();
+  const { isLoading, isLoggedIn, user, login, logout } = usePyloAuth();
   const client = usePyloClient<PyloSchema>();
   const transport = usePyloTransport();
   const { data } = usePyloList("contact", { select: { id: true } });
@@ -23,10 +23,10 @@ function Screen() {
   void startUpload;
 
   if (isLoading) return <p>loading</p>;
-  return isSignedIn ? (
+  return isLoggedIn ? (
     <button onClick={() => void logout()}>{user?.email ?? String(data?.length)}</button>
   ) : (
-    <button onClick={() => void login("a@b.c", "pw")}>sign in</button>
+    <button onClick={() => void login("a@b.c", "pw")}>log in</button>
   );
 }
 
