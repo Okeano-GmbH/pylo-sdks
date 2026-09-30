@@ -26,7 +26,6 @@ beforeEach(() => {
   graphqlRequest.mockReset();
   headerCookies.mockClear();
   process.env.PYLO_APP_ID = "app1";
-  process.env.PYLO_APP_URL = "https://app.test";
   process.env.PYLO_GRAPHQL_ENDPOINT = "https://api.test/graphql";
 });
 
@@ -92,13 +91,16 @@ describe("social start route", () => {
     expect(res.cookies.get(VERIFIER_COOKIE)?.path).toBe("/auth/done");
   });
 
-  it("trims a trailing slash from PYLO_APP_URL", async () => {
-    process.env.PYLO_APP_URL = "https://app.test/";
-    const res = await start("google");
-    expect(new URL(res.headers.get("location")!).searchParams.get("return_url")).toBe(
-      "https://app.test/api/auth/callback",
+  it("builds the return URL from the forwarded host and protocol", async () => {
+    const res = await createSocialStartRoute()(
+      new NextRequest("http://0.0.0.0:3009/api/auth/google/start", {
+        headers: { "x-forwarded-host": "app.example.com, proxy.internal", "x-forwarded-proto": "https" },
+      }),
+      { params: Promise.resolve({ provider: "google" }) },
     );
-    expect(res.cookies.get(VERIFIER_COOKIE)?.path).toBe("/api/auth/callback");
+    expect(new URL(res.headers.get("location")!).searchParams.get("return_url")).toBe(
+      "https://app.example.com/api/auth/callback",
+    );
   });
 
   it("accepts plain-object params (Next 14)", async () => {
@@ -114,10 +116,6 @@ describe("social start route", () => {
     expect(res.headers.getSetCookie()).toEqual([]);
   });
 
-  it("throws without a return URL", async () => {
-    delete process.env.PYLO_APP_URL;
-    await expect(start("google")).rejects.toThrow();
-  });
 });
 
 describe("social callback route", () => {
@@ -176,6 +174,20 @@ describe("social callback route", () => {
     expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/login");
     expect(res.headers.get("location")).toContain("error=");
     expectVerifierDeleted(res);
+  });
+
+  it("redirects to the forwarded host, not the host the server is bound to", async () => {
+    graphqlRequest.mockResolvedValue(redeemed("/dash"));
+    const res = await createSocialCallbackRoute()(
+      new NextRequest("http://0.0.0.0:3009/api/auth/callback?code=abc", {
+        headers: {
+          cookie: `${VERIFIER_COOKIE}=ver`,
+          "x-forwarded-host": "app.example.com",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+    expect(res.headers.get("location")).toBe("https://app.example.com/dash");
   });
 
   it("keeps an existing query string on loginPath", async () => {
