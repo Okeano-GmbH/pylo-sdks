@@ -38,6 +38,26 @@ describe("handoff", () => {
     });
   });
 
+  it("adds the invite and leaves out an omitted redirect", () => {
+    const url = new URL(
+      buildSocialStartUrl({
+        endpoint: "https://api.test/graphql",
+        provider: "google",
+        appId: "a1",
+        returnUrl: "https://app/auth",
+        challenge: "c",
+        invite: "inv-1",
+      }),
+    );
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      app_id: "a1",
+      return_url: "https://app/auth",
+      handoff_challenge: "c",
+      invite: "inv-1",
+    });
+    expect(url.searchParams.has("redirect")).toBe(false);
+  });
+
   it.each([
     ["https://app/auth?code=k", { code: "k" }],
     ["https://app/auth?tab=x&code=k", { code: "k" }],
