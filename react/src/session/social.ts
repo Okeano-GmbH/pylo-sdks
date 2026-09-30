@@ -39,6 +39,7 @@ function failed(code: "SIGN_IN_FAILED" | "CANCELLED", message: string): SocialSi
 
 export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
   const verifierKey = `${o.keyPrefix}.handoff_verifier`;
+  let completing: Promise<SocialSignInResult> | null = null;
 
   function redeem(
     parsed: ReturnType<typeof parseHandoffCallback>,
@@ -50,6 +51,26 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
       return failed("SIGN_IN_FAILED", "No sign-in was started in this browser session");
     }
     return o.store.redeemHandoff(parsed.code, verifier);
+  }
+
+  async function finish(url: string): Promise<SocialSignInResult> {
+    try {
+      const verifier = sessionStorage.getItem(verifierKey);
+      sessionStorage.removeItem(verifierKey);
+
+      const parsed = parseHandoffCallback(url);
+      if (parsed && url === location.href) {
+        // A reload must not replay a spent, single-use code.
+        const clean = new URL(url);
+        clean.searchParams.delete("code");
+        clean.searchParams.delete("error");
+        history.replaceState(history.state, "", clean.toString());
+      }
+
+      return await redeem(parsed, verifier);
+    } catch (error) {
+      return failed("SIGN_IN_FAILED", error instanceof Error ? error.message : "Sign-in failed");
+    }
   }
 
   return {
@@ -88,20 +109,17 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
       return new Promise<never>(() => {});
     },
 
-    async completeSignIn(url = location.href) {
-      const verifier = sessionStorage.getItem(verifierKey);
-      sessionStorage.removeItem(verifierKey);
-
-      const parsed = parseHandoffCallback(url);
-      if (parsed) {
-        // A reload must not replay a spent, single-use code.
-        const clean = new URL(url);
-        clean.searchParams.delete("code");
-        clean.searchParams.delete("error");
-        history.replaceState(history.state, "", clean.toString());
+    completeSignIn(url) {
+      if (o.openAuthSession) {
+        return Promise.resolve(
+          failed("SIGN_IN_FAILED", "signInWith already completes the sign-in in this environment"),
+        );
       }
-
-      return redeem(parsed, verifier);
+      // StrictMode runs effects twice; a second call must share the first's single-use verifier.
+      completing ??= finish(url ?? location.href).finally(() => {
+        completing = null;
+      });
+      return completing;
     },
   };
 }

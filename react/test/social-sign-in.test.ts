@@ -67,6 +67,7 @@ describe("signInWith on the web", () => {
 describe("completeSignIn", () => {
   it("redeems the code with the stored verifier and cleans up", async () => {
     session.set(VERIFIER_KEY, "v1");
+    vi.stubGlobal("location", { href: "https://app/auth?code=c", assign });
     const social = setup();
 
     const result = await social.completeSignIn("https://app/auth?code=c");
@@ -100,6 +101,7 @@ describe("completeSignIn", () => {
 
   it("reports the broker's error", async () => {
     session.set(VERIFIER_KEY, "v1");
+    vi.stubGlobal("location", { href: "https://app/auth?error=Login%20failed", assign });
 
     const result = await setup().completeSignIn("https://app/auth?error=Login%20failed");
 
@@ -117,6 +119,81 @@ describe("completeSignIn", () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("SIGN_IN_FAILED");
+    expect(redeemHandoff).not.toHaveBeenCalled();
+  });
+});
+
+describe("completeSignIn robustness", () => {
+  const onReturnPage = (href: string) => {
+    const loc = { href, assign };
+    vi.stubGlobal("location", loc);
+    replaceState.mockImplementation((_state: unknown, _title: string, url: string) => {
+      loc.href = url;
+    });
+  };
+
+  it("redeems once when called twice concurrently", async () => {
+    session.set(VERIFIER_KEY, "v1");
+    onReturnPage("https://app/auth?code=c");
+    const social = setup();
+
+    const first = social.completeSignIn();
+    const second = social.completeSignIn();
+
+    expect(await second).toBe(await first);
+    expect(redeemHandoff).toHaveBeenCalledTimes(1);
+    expect(await first).toEqual({ success: true, redirect: "/x" });
+  });
+
+  it("finds no response once an earlier call has settled", async () => {
+    session.set(VERIFIER_KEY, "v1");
+    onReturnPage("https://app/auth?code=c");
+    const social = setup();
+    await social.completeSignIn();
+
+    const result = await social.completeSignIn();
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: "SIGN_IN_FAILED", message: "No sign-in response in this URL" },
+    });
+    expect(redeemHandoff).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves a failure when the redeem rejects", async () => {
+    session.set(VERIFIER_KEY, "v1");
+    redeemHandoff.mockRejectedValue(new Error("boom"));
+
+    const result = await setup().completeSignIn("https://app/auth?code=c");
+
+    expect(result).toEqual({ success: false, error: { code: "SIGN_IN_FAILED", message: "boom" } });
+  });
+
+  it("does not rewrite the address bar for a URL other than the current one", async () => {
+    session.set(VERIFIER_KEY, "v1");
+    vi.stubGlobal("location", { href: "https://app/elsewhere", assign });
+
+    const result = await setup().completeSignIn("https://app/auth?code=c");
+
+    expect(result.success).toBe(true);
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  it("fails without touching storage or history when an auth session is configured", async () => {
+    const social = setup({ openAuthSession: vi.fn() });
+
+    const result = await social.completeSignIn("myapp://auth?code=c");
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "SIGN_IN_FAILED",
+        message: "signInWith already completes the sign-in in this environment",
+      },
+    });
+    expect(sessionStorage.getItem).not.toHaveBeenCalled();
+    expect(sessionStorage.removeItem).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
     expect(redeemHandoff).not.toHaveBeenCalled();
   });
 });
