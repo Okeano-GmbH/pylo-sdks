@@ -1,7 +1,7 @@
 import type { SocialProvider } from "./types.js";
 
 export interface HandoffCrypto {
-  randomBytes(length: number): Uint8Array;
+  randomBytes(length: number): Uint8Array | Promise<Uint8Array>;
   sha256(data: Uint8Array): Promise<ArrayBuffer>;
 }
 
@@ -16,8 +16,10 @@ function base64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function createHandoffVerifier(crypto: HandoffCrypto = webHandoffCrypto): string {
-  return base64url(crypto.randomBytes(32));
+export async function createHandoffVerifier(
+  crypto: HandoffCrypto = webHandoffCrypto,
+): Promise<string> {
+  return base64url(await crypto.randomBytes(32));
 }
 
 export async function createHandoffChallenge(

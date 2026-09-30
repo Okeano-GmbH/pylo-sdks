@@ -79,7 +79,7 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
       let startUrl: string;
       let finalUrl: string | null = null;
       try {
-        verifier = createHandoffVerifier(o.crypto);
+        verifier = await createHandoffVerifier(o.crypto);
         const challenge = await createHandoffChallenge(verifier, o.crypto);
         startUrl = buildSocialStartUrl({
           endpoint: o.endpoint,

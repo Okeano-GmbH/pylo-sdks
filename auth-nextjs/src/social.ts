@@ -36,7 +36,7 @@ export function createSocialStartRoute(o: { returnUrl?: string } = {}) {
       throw new Error("[pylo-auth] Set the returnUrl option or the PYLO_APP_URL environment variable");
     }
 
-    const verifier = createHandoffVerifier();
+    const verifier = await createHandoffVerifier();
     const redirect = req.nextUrl.searchParams.get("redirect");
     const invite = req.nextUrl.searchParams.get("invite");
     const url = buildSocialStartUrl({

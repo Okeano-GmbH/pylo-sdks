@@ -14,8 +14,16 @@ describe("handoff", () => {
     );
   });
 
-  it("makes a 43-char base64url verifier", () => {
-    expect(createHandoffVerifier()).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  it("makes a 43-char base64url verifier", async () => {
+    expect(await createHandoffVerifier()).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("accepts asynchronous random bytes", async () => {
+    const verifier = await createHandoffVerifier({
+      randomBytes: async (length) => new Uint8Array(length),
+      sha256: async () => new ArrayBuffer(32),
+    });
+    expect(verifier).toBe("A".repeat(43));
   });
 
   it("builds the start URL on the endpoint's origin", () => {
