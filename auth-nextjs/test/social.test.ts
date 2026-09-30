@@ -2,23 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server.js";
 
 const graphqlRequest = vi.fn();
-const jar = new Map<string, string>();
-const del = vi.fn<(arg: unknown) => void>();
-const set = vi.fn<(name: string, value: string, opts?: Record<string, unknown>) => void>(
-  (name, value) => {
-    jar.set(name, value);
-  },
-);
+const headerCookies = vi.fn();
 
 vi.mock("next/headers.js", () => ({
-  cookies: async () => ({
-    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined),
-    set,
-    delete: (arg: string | { name: string }) => {
-      del(arg);
-      jar.delete(typeof arg === "string" ? arg : arg.name);
-    },
-  }),
+  cookies: async () => {
+    headerCookies();
+    return { get: () => undefined, set: () => {}, delete: () => {} };
+  },
   headers: async () => new Headers(),
 }));
 
@@ -34,26 +24,41 @@ const VERIFIER_COOKIE = "pylo_handoff_verifier_app1";
 
 beforeEach(() => {
   graphqlRequest.mockReset();
-  set.mockClear();
-  del.mockClear();
-  jar.clear();
+  headerCookies.mockClear();
   process.env.PYLO_APP_ID = "app1";
   process.env.PYLO_APP_URL = "https://app.test";
   process.env.PYLO_GRAPHQL_ENDPOINT = "https://api.test/graphql";
 });
 
-const start = (provider: string, query = "") =>
-  createSocialStartRoute()(new NextRequest(`https://app.test/api/auth/${provider}/start${query}`), {
-    params: Promise.resolve({ provider }),
-  });
-
-const callback = (query: string, loginPath?: string) =>
-  createSocialCallbackRoute(loginPath ? { loginPath } : {})(
-    new NextRequest(`https://app.test/api/auth/callback${query}`),
+const start = (provider: string, query = "", options?: { returnUrl?: string }) =>
+  createSocialStartRoute(options)(
+    new NextRequest(`https://app.test/api/auth/${provider}/start${query}`),
+    { params: Promise.resolve({ provider }) },
   );
 
-const expectVerifierDeletedAtCallbackPath = () =>
-  expect(del).toHaveBeenCalledWith({ name: VERIFIER_COOKIE, path: "/api/auth/callback" });
+const callback = (
+  query: string,
+  { loginPath, verifier, path = "/api/auth/callback" }: {
+    loginPath?: string;
+    verifier?: string;
+    path?: string;
+  } = {},
+) =>
+  createSocialCallbackRoute(loginPath ? { loginPath } : {})(
+    new NextRequest(`https://app.test${path}${query}`, {
+      headers: verifier ? { cookie: `${VERIFIER_COOKIE}=${verifier}` } : {},
+    }),
+  );
+
+const setCookie = (res: Response, name: string) =>
+  res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
+
+const expectVerifierDeleted = (res: Response, path = "/api/auth/callback") => {
+  const cookie = setCookie(res, VERIFIER_COOKIE);
+  expect(cookie).toMatch(new RegExp(`^${VERIFIER_COOKIE}=;`));
+  expect(cookie).toContain(`Path=${path}`);
+  expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/);
+};
 
 describe("social start route", () => {
   it("redirects to the broker with a challenge bound to the cookie verifier", async () => {
@@ -65,19 +70,35 @@ describe("social start route", () => {
     expect(target.searchParams.get("return_url")).toBe("https://app.test/api/auth/callback");
     expect(target.searchParams.get("redirect")).toBe("/dash");
 
-    const verifier = jar.get(VERIFIER_COOKIE)!;
-    expect(target.searchParams.get("handoff_challenge")).toBe(await createHandoffChallenge(verifier));
-    expect(set).toHaveBeenCalledWith(
-      VERIFIER_COOKIE,
-      verifier,
-      expect.objectContaining({
-        httpOnly: true,
-        sameSite: "lax",
-        secure: false,
-        path: "/api/auth/callback",
-        maxAge: 600,
-      }),
+    const cookie = res.cookies.get(VERIFIER_COOKIE)!;
+    expect(target.searchParams.get("handoff_challenge")).toBe(
+      await createHandoffChallenge(cookie.value),
     );
+    expect(cookie).toMatchObject({
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/api/auth/callback",
+      maxAge: 600,
+    });
+    expect(headerCookies).not.toHaveBeenCalled();
+  });
+
+  it("scopes the verifier cookie to a custom returnUrl's path", async () => {
+    const res = await start("google", "", { returnUrl: "https://app.test/auth/done" });
+    expect(new URL(res.headers.get("location")!).searchParams.get("return_url")).toBe(
+      "https://app.test/auth/done",
+    );
+    expect(res.cookies.get(VERIFIER_COOKIE)?.path).toBe("/auth/done");
+  });
+
+  it("trims a trailing slash from PYLO_APP_URL", async () => {
+    process.env.PYLO_APP_URL = "https://app.test/";
+    const res = await start("google");
+    expect(new URL(res.headers.get("location")!).searchParams.get("return_url")).toBe(
+      "https://app.test/api/auth/callback",
+    );
+    expect(res.cookies.get(VERIFIER_COOKIE)?.path).toBe("/api/auth/callback");
   });
 
   it("accepts plain-object params (Next 14)", async () => {
@@ -90,7 +111,7 @@ describe("social start route", () => {
   it("returns 404 for an unknown provider", async () => {
     const res = await start("github");
     expect(res.status).toBe(404);
-    expect(set).not.toHaveBeenCalled();
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 
   it("throws without a return URL", async () => {
@@ -104,37 +125,48 @@ describe("social callback route", () => {
     data: { redeemLoginHandoff: { data: { auth_token: "at", refresh_token: "rt", redirect } } },
   });
 
-  it("redeems the code, sets auth cookies, clears the verifier and redirects", async () => {
-    jar.set(VERIFIER_COOKIE, "ver");
+  it("redeems the code, sets auth cookies on the response, clears the verifier and redirects", async () => {
     graphqlRequest.mockResolvedValue(redeemed("/dash"));
-    const res = await callback("?code=abc");
+    const res = await callback("?code=abc", { verifier: "ver" });
     expect(graphqlRequest).toHaveBeenCalledWith(
       "https://api.test/graphql",
       REDEEM_LOGIN_HANDOFF_MUTATION,
       { input: { code: "abc", handoff_verifier: "ver" } },
     );
-    expect(jar.get("pylo_auth_token_app1")).toBe("at");
-    expect(jar.get("pylo_refresh_token_app1")).toBe("rt");
-    expect(jar.has(VERIFIER_COOKIE)).toBe(false);
-    expectVerifierDeletedAtCallbackPath();
+    const base = { httpOnly: true, secure: false, sameSite: "lax", path: "/" };
+    expect(res.cookies.get("pylo_auth_token_app1")).toMatchObject({
+      ...base,
+      value: "at",
+      maxAge: 60 * 60,
+    });
+    expect(res.cookies.get("pylo_refresh_token_app1")).toMatchObject({
+      ...base,
+      value: "rt",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    expectVerifierDeleted(res);
+    expect(headerCookies).not.toHaveBeenCalled();
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("https://app.test/dash");
   });
 
+  it("deletes the verifier at the callback's own path", async () => {
+    graphqlRequest.mockResolvedValue(redeemed(null));
+    const res = await callback("?code=abc", { verifier: "ver", path: "/auth/done" });
+    expectVerifierDeleted(res, "/auth/done");
+  });
+
   it("falls back to / for an unsafe redirect", async () => {
-    jar.set(VERIFIER_COOKIE, "ver");
     graphqlRequest.mockResolvedValue(redeemed("//evil.com"));
-    const res = await callback("?code=abc");
+    const res = await callback("?code=abc", { verifier: "ver" });
     expect(res.headers.get("location")).toBe("https://app.test/");
   });
 
   it("forwards a provider error to the login page without calling the API", async () => {
-    jar.set(VERIFIER_COOKIE, "ver");
-    const res = await callback("?error=Login+failed");
+    const res = await callback("?error=Login+failed", { verifier: "ver" });
     expect(graphqlRequest).not.toHaveBeenCalled();
     expect(res.headers.get("location")).toBe("https://app.test/auth/login?error=Login+failed");
-    expect(jar.has(VERIFIER_COOKIE)).toBe(false);
-    expectVerifierDeletedAtCallbackPath();
+    expectVerifierDeleted(res);
   });
 
   it("errors without calling the API when the verifier cookie is missing", async () => {
@@ -143,11 +175,11 @@ describe("social callback route", () => {
     expect(res.status).toBe(302);
     expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/login");
     expect(res.headers.get("location")).toContain("error=");
-    expectVerifierDeletedAtCallbackPath();
+    expectVerifierDeleted(res);
   });
 
   it("keeps an existing query string on loginPath", async () => {
-    const res = await callback("?error=Nope", "/login?tab=x");
+    const res = await callback("?error=Nope", { loginPath: "/login?tab=x" });
     expect(res.headers.get("location")).toBe("https://app.test/login?tab=x&error=Nope");
   });
 
@@ -156,13 +188,11 @@ describe("social callback route", () => {
     ["no data", () => graphqlRequest.mockResolvedValue({})],
     ["a thrown fetch", () => graphqlRequest.mockRejectedValue(new Error("network"))],
   ])("redirects to login on redeem failure: %s", async (_name, arrange) => {
-    jar.set(VERIFIER_COOKIE, "ver");
     arrange();
-    const res = await callback("?code=abc");
+    const res = await callback("?code=abc", { verifier: "ver" });
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("/auth/login?error=");
-    expect(jar.has(VERIFIER_COOKIE)).toBe(false);
-    expectVerifierDeletedAtCallbackPath();
-    expect(jar.has("pylo_auth_token_app1")).toBe(false);
+    expectVerifierDeleted(res);
+    expect(setCookie(res, "pylo_auth_token_app1")).toBeUndefined();
   });
 });

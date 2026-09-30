@@ -1,4 +1,3 @@
-import { cookies } from "next/headers.js";
 import { NextResponse, type NextRequest } from "next/server.js";
 import {
   graphqlRequest,
@@ -13,11 +12,11 @@ import {
   type SocialProvider,
   type LoginHandoffResponse,
 } from "@pylo/auth";
-import { getAppId, getCookieOptions, setAuthCookies } from "./cookies.js";
+import { getAppId, getCookieOptions, setAuthCookiesOnResponse } from "./cookies.js";
 import { getEndpoint } from "./server.js";
 
 const CALLBACK_PATH = "/api/auth/callback";
-const PROVIDERS: readonly string[] = ["google", "microsoft"];
+const PROVIDERS: readonly string[] = ["google", "microsoft"] satisfies readonly SocialProvider[];
 
 const verifierCookieName = (): string => `pylo_handoff_verifier_${getAppId()}`;
 
@@ -31,8 +30,8 @@ export function createSocialStartRoute(o: { returnUrl?: string } = {}) {
       return new NextResponse("Not found", { status: 404 });
     }
 
-    const returnUrl =
-      o.returnUrl ?? (process.env.PYLO_APP_URL ? `${process.env.PYLO_APP_URL}${CALLBACK_PATH}` : undefined);
+    const appUrl = process.env.PYLO_APP_URL?.replace(/\/$/, "");
+    const returnUrl = o.returnUrl ?? (appUrl ? `${appUrl}${CALLBACK_PATH}` : undefined);
     if (!returnUrl) {
       throw new Error("[pylo-auth] Set the returnUrl option or the PYLO_APP_URL environment variable");
     }
@@ -50,15 +49,15 @@ export function createSocialStartRoute(o: { returnUrl?: string } = {}) {
       ...(invite ? { invite } : {}),
     });
 
-    (await cookies()).set(verifierCookieName(), verifier, {
+    const res = NextResponse.redirect(url, 302);
+    res.cookies.set(verifierCookieName(), verifier, {
       httpOnly: true,
       sameSite: "lax",
       secure: getCookieOptions().secure,
-      path: CALLBACK_PATH,
+      path: new URL(returnUrl).pathname,
       maxAge: 600,
     });
-
-    return NextResponse.redirect(url, 302);
+    return res;
   };
 }
 
@@ -66,16 +65,17 @@ export function createSocialCallbackRoute(o: { loginPath?: string } = {}) {
   const loginPath = o.loginPath ?? "/auth/login";
 
   return async (req: NextRequest): Promise<NextResponse> => {
+    const name = verifierCookieName();
+    const verifier = req.cookies.get(name)?.value;
+    const done = (res: NextResponse) => {
+      res.cookies.delete({ name, path: req.nextUrl.pathname });
+      return res;
+    };
     const fail = (message: string) => {
       const url = new URL(loginPath, req.url);
       url.searchParams.set("error", message);
-      return NextResponse.redirect(url, 302);
+      return done(NextResponse.redirect(url, 302));
     };
-
-    const jar = await cookies();
-    const name = verifierCookieName();
-    const verifier = jar.get(name)?.value;
-    jar.delete({ name, path: CALLBACK_PATH });
 
     const result = parseHandoffCallback(req.url);
     if (result && "error" in result) return fail(result.error);
@@ -91,8 +91,9 @@ export function createSocialCallbackRoute(o: { loginPath?: string } = {}) {
       if (!response.data) return fail("Login failed");
 
       const { auth_token, refresh_token, redirect } = response.data.redeemLoginHandoff.data;
-      await setAuthCookies(auth_token, refresh_token);
-      return NextResponse.redirect(new URL(safeRedirectPath(redirect) ?? "/", req.url), 302);
+      const res = NextResponse.redirect(new URL(safeRedirectPath(redirect) ?? "/", req.url), 302);
+      setAuthCookiesOnResponse(res, auth_token, refresh_token);
+      return done(res);
     } catch {
       return fail("Login failed");
     }
