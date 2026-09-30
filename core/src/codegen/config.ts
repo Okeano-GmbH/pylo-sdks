@@ -8,6 +8,8 @@ export interface PyloConfig {
   endpoint?: string;
   apiKey: string;
   output?: string;
+  /** The Pylo app whose sign-in providers and return URLs `signInWith` is narrowed to. */
+  appId?: string;
 }
 
 export function defineConfig(config: PyloConfig): PyloConfig {
@@ -18,6 +20,7 @@ export interface ResolvedPyloConfig {
   endpoint: string;
   apiKey: string;
   output?: string;
+  appId?: string;
 }
 
 export async function loadConfig(cwd: string): Promise<ResolvedPyloConfig> {

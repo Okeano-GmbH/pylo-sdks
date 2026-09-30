@@ -2,6 +2,8 @@ import { resolve } from "node:path";
 import { loadConfig } from "./config.js";
 import { fetchSchema } from "./fetch-schema.js";
 import { fetchDocumentTemplates } from "./fetch-templates.js";
+import { fetchSocialBindings } from "./fetch-social.js";
+import type { SocialBindings } from "./fetch-social.js";
 import { analyzeEntities } from "./analyze.js";
 import { analyzeDocumentTemplates } from "./analyze-templates.js";
 import {
@@ -35,13 +37,20 @@ export async function generate(options?: GenerateOptions): Promise<void> {
   const rawTemplates = await fetchDocumentTemplates(config);
   console.log(`  found ${rawTemplates.length} document templates`);
 
+  let social: SocialBindings | undefined;
+  if (config.appId) {
+    console.log("Fetching sign-in providers...");
+    social = await fetchSocialBindings({ ...config, appId: config.appId });
+    console.log(`  found ${social.providers.length} sign-in providers`);
+  }
+
   console.log("Analyzing entities...");
   const entities = analyzeEntities(rawEntities);
   const templates = analyzeDocumentTemplates(rawTemplates);
 
   console.log("Generating types...");
   const files: Record<string, string> = {
-    "index.ts": generateIndexFile(entities, importSource, templates),
+    "index.ts": generateIndexFile(entities, importSource, templates, social),
     "entities.ts": generateEntitiesFile(entities, importSource),
   };
 

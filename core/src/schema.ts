@@ -21,6 +21,11 @@ export type {
   RawDocumentTemplate,
   DocumentTemplateListResponse,
 } from "./codegen/fetch-templates.js";
+export {
+  SOCIAL_BINDINGS_QUERY,
+  fetchSocialBindingsWith,
+} from "./codegen/fetch-social.js";
+export type { RawSocialBinding, SocialBindings } from "./codegen/fetch-social.js";
 export { analyzeEntities } from "./codegen/analyze.js";
 export { analyzeDocumentTemplates } from "./codegen/analyze-templates.js";
 export type {

@@ -1,5 +1,6 @@
 import { ENTITY_CAPABILITY_NAMES } from "./analyze.js";
 import type { AnalyzedEntity, AnalyzedField } from "./analyze.js";
+import type { SocialBindings } from "./fetch-social.js";
 import type {
   AnalyzedDocumentTemplate,
   TemplateInput,
@@ -369,6 +370,7 @@ export function generateIndexFile(
   entities: AnalyzedEntity[],
   importSource: string,
   templates: AnalyzedDocumentTemplate[] = [],
+  social?: SocialBindings,
 ): string {
   const lines: string[] = [];
 
@@ -481,6 +483,19 @@ export function generateIndexFile(
     lines.push(...generateDocumentTemplatesType(templates, entities));
   }
 
+  // An empty list would register `never` and make `signInWith` uncallable.
+  const socialProviders = social?.providers ?? [];
+  const socialReturnUrls = social?.returnUrls ?? [];
+  if (socialProviders.length > 0) {
+    lines.push(`export const socialProviders = ${JSON.stringify(socialProviders)} as const;`);
+  }
+  if (socialReturnUrls.length > 0) {
+    lines.push(`export const socialReturnUrls = ${JSON.stringify(socialReturnUrls)} as const;`);
+  }
+  if (socialProviders.length > 0 || socialReturnUrls.length > 0) {
+    lines.push("");
+  }
+
   // Register the schema so the typed client and the PyloSelect/PyloResult
   // helpers pick it up automatically (no hand-written `declare module`).
   if (REGISTERABLE_SOURCES.has(importSource)) {
@@ -491,6 +506,12 @@ export function generateIndexFile(
     );
     if (templates.length > 0) {
       lines.push("    documentTemplates: PyloDocumentTemplates;");
+    }
+    if (socialProviders.length > 0) {
+      lines.push("    socialProvider: (typeof socialProviders)[number];");
+    }
+    if (socialReturnUrls.length > 0) {
+      lines.push("    socialReturnUrl: (typeof socialReturnUrls)[number];");
     }
     lines.push("  }", "}", "");
   }
