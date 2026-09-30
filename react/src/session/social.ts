@@ -54,28 +54,30 @@ export function createSocialSignIn(o: SocialSignInOptions): SocialSignIn {
 
   return {
     async signInWith(provider, { returnUrl, redirect, invite }) {
-      const verifier = createHandoffVerifier(o.crypto);
-      const challenge = await createHandoffChallenge(verifier, o.crypto);
-      const startUrl = buildSocialStartUrl({
-        endpoint: o.endpoint,
-        provider,
-        appId: o.appId,
-        returnUrl,
-        challenge,
-        ...(redirect !== undefined ? { redirect } : {}),
-        ...(invite !== undefined ? { invite } : {}),
-      });
+      let verifier: string;
+      let startUrl: string;
+      let finalUrl: string | null = null;
+      try {
+        verifier = createHandoffVerifier(o.crypto);
+        const challenge = await createHandoffChallenge(verifier, o.crypto);
+        startUrl = buildSocialStartUrl({
+          endpoint: o.endpoint,
+          provider,
+          appId: o.appId,
+          returnUrl,
+          challenge,
+          ...(redirect !== undefined ? { redirect } : {}),
+          ...(invite !== undefined ? { invite } : {}),
+        });
+        if (o.openAuthSession) finalUrl = await o.openAuthSession(startUrl, returnUrl);
+      } catch (error) {
+        return failed(
+          "SIGN_IN_FAILED",
+          error instanceof Error ? error.message : "Sign-in failed",
+        );
+      }
 
       if (o.openAuthSession) {
-        let finalUrl: string | null;
-        try {
-          finalUrl = await o.openAuthSession(startUrl, returnUrl);
-        } catch (error) {
-          return failed(
-            "SIGN_IN_FAILED",
-            error instanceof Error ? error.message : "Sign-in failed",
-          );
-        }
         if (finalUrl === null) return failed("CANCELLED", "Sign-in was cancelled");
         return redeem(parseHandoffCallback(finalUrl), verifier);
       }

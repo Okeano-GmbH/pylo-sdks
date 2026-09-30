@@ -13,7 +13,7 @@ describe("usePyloAuth social sign-in without augmentation", () => {
 
   it("returns the sanitised redirect alongside the auth result", () => {
     const { completeSignIn } = usePyloAuth();
-    expectTypeOf(completeSignIn).returns.resolves.toMatchTypeOf<
+    expectTypeOf(completeSignIn).returns.resolves.toExtend<
       AuthResult & { redirect?: string }
     >();
   });

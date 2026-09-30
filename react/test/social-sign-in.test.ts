@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createHandoffChallenge } from "@pylo/auth";
+import { createHandoffChallenge, webHandoffCrypto } from "@pylo/auth";
+import type { HandoffCrypto } from "@pylo/auth";
 import { createSocialSignIn } from "../src/session/social.js";
 import type { SessionStore } from "../src/session/store.js";
 
@@ -10,7 +11,12 @@ let assign: ReturnType<typeof vi.fn>;
 let replaceState: ReturnType<typeof vi.fn>;
 let redeemHandoff: ReturnType<typeof vi.fn>;
 
-function setup(extra: { openAuthSession?: (url: string, returnUrl: string) => Promise<string | null> } = {}) {
+function setup(
+  extra: {
+    openAuthSession?: (url: string, returnUrl: string) => Promise<string | null>;
+    crypto?: HandoffCrypto;
+  } = {},
+) {
   const store = { redeemHandoff } as unknown as SessionStore;
   return createSocialSignIn({
     endpoint: "https://api.test/graphql",
@@ -137,6 +143,25 @@ describe("signInWith through an auth session", () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("SIGN_IN_FAILED");
+  });
+
+  it("resolves a failure when the challenge cannot be computed", async () => {
+    const social = setup({
+      openAuthSession: vi.fn(),
+      crypto: {
+        ...webHandoffCrypto,
+        sha256: async () => {
+          throw new Error("SHA-256 unavailable");
+        },
+      },
+    });
+
+    const result = await social.signInWith("google", { returnUrl: "myapp://auth" });
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: "SIGN_IN_FAILED", message: "SHA-256 unavailable" },
+    });
   });
 
   it("redeems with the verifier behind the challenge it sent", async () => {

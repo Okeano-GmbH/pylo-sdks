@@ -230,6 +230,29 @@ describe("redeemHandoff", () => {
   });
 });
 
+describe("redeemHandoff network failure", () => {
+  it("resolves a failure and keeps the existing session", async () => {
+    const storage = createMemoryStorage();
+    const token = fresh();
+    await storage.setItem("pylo.auth_token", token);
+    await storage.setItem("pylo.refresh_token", "r1");
+    const onSignOut = vi.fn();
+    graphqlRequest.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const store = createSessionStore({ ...options(), storage, onSignOut });
+    await store.init();
+    const result = await store.redeemHandoff("c", "v");
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: "SIGN_IN_FAILED", message: "Failed to fetch" },
+    });
+    expect(store.getState()).toEqual({ status: "signedIn", token });
+    expect(await storage.getItem("pylo.refresh_token")).toBe("r1");
+    expect(onSignOut).not.toHaveBeenCalled();
+  });
+});
+
 describe("getToken", () => {
   it("refreshes a token that is past its threshold", async () => {
     const storage = createMemoryStorage();

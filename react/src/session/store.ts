@@ -11,6 +11,7 @@ import {
 } from "@pylo/auth";
 import type {
   AuthResult,
+  GraphQLResponse,
   LoginHandoffResponse,
   LoginResponse,
   RefreshTokenResponse,
@@ -208,11 +209,22 @@ export function createSessionStore(options: SessionStoreOptions): SessionStore {
     },
 
     async redeemHandoff(code, verifier) {
-      const response = await graphqlRequest<LoginHandoffResponse>(
-        options.endpoint,
-        REDEEM_LOGIN_HANDOFF_MUTATION,
-        { input: { code, handoff_verifier: verifier } },
-      );
+      let response: GraphQLResponse<LoginHandoffResponse>;
+      try {
+        response = await graphqlRequest<LoginHandoffResponse>(
+          options.endpoint,
+          REDEEM_LOGIN_HANDOFF_MUTATION,
+          { input: { code, handoff_verifier: verifier } },
+        );
+      } catch (error) {
+        return {
+          success: false,
+          error: {
+            code: "SIGN_IN_FAILED",
+            message: error instanceof Error ? error.message : "Sign-in failed",
+          },
+        };
+      }
 
       if (hasErrors(response) || !response.data) {
         return {
