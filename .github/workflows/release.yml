@@ -107,7 +107,8 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
+      # This job can mint an npm OIDC token, so dependency install scripts must not run here.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
