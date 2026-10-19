@@ -130,6 +130,7 @@ describe("analyzeEntities — JSON fields", () => {
     const [entity] = analyzeEntities([jsonEntity]);
     const config = entity.fields.find((f) => f.name === "config")!;
     expect(config.tsType).toBe("string");
+    expect(config.dataType).toBe("JSON");
     expect(config.nullable).toBe(false);
   });
 
