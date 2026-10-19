@@ -54,15 +54,15 @@ function createInputOf(source: string): string {
   return out.slice(start, out.indexOf("export interface", start + 1));
 }
 
-// The schema names this key `__replace_vars`, alongside the other underscored
-// directive `__search_value`. It is declared `[String!]`; narrowing to a union
+// The schema names this key `_replace_vars`, alongside the other underscored
+// directive `_search_value`. It is declared `[String!]`; narrowing to a union
 // of the entity's field names is a strict subtype, so it stays wire-compatible.
-describe("generateIndexFile — __replace_vars", () => {
+describe("generateIndexFile — _replace_vars", () => {
   const block = updateInputOf("@pylo/node");
 
-  it("adds a typed __replace_vars field to the update input", () => {
+  it("adds a typed _replace_vars field to the update input", () => {
     expect(block).toContain(
-      "__replace_vars?: Array<'id' | 'first_name' | 'body'>",
+      "_replace_vars?: Array<'id' | 'first_name' | 'body'>",
     );
   });
 
@@ -77,8 +77,8 @@ describe("generateIndexFile — __replace_vars", () => {
   // so it belongs in the union — only the server-managed columns are excluded.
   it("excludes server-managed columns from the field-name union", () => {
     const union = block.slice(
-      block.indexOf("__replace_vars"),
-      block.indexOf(";", block.indexOf("__replace_vars")),
+      block.indexOf("_replace_vars"),
+      block.indexOf(";", block.indexOf("_replace_vars")),
     );
     for (const sys of ["'integer_id'", "'created_at'", "'updated_at'"]) {
       expect(union).not.toContain(sys);
@@ -86,17 +86,17 @@ describe("generateIndexFile — __replace_vars", () => {
     expect(union).toContain("'id'");
   });
 
-  // The schema puts `__replace_vars` on the create inputs too.
+  // The schema puts `_replace_vars` on the create inputs too.
   it("adds it to the create input as well", () => {
-    expect(createInputOf("@pylo/node")).toContain("__replace_vars?: Array<");
+    expect(createInputOf("@pylo/node")).toContain("_replace_vars?: Array<");
   });
 
   // A create input has no `id` field, so no template can land in one.
   it("omits id from the create input's union", () => {
     const create = createInputOf("@pylo/node");
     const union = create.slice(
-      create.indexOf("__replace_vars"),
-      create.indexOf(";", create.indexOf("__replace_vars")),
+      create.indexOf("_replace_vars"),
+      create.indexOf(";", create.indexOf("_replace_vars")),
     );
     expect(union).not.toContain("'id'");
     expect(union).toContain("'first_name'");
@@ -104,7 +104,7 @@ describe("generateIndexFile — __replace_vars", () => {
 
   it("documents the field with a JSDoc comment", () => {
     expect(block).toContain("template variables");
-    expect(block).toMatch(/\/\*\*[\s\S]*__replace_vars\?: Array</);
+    expect(block).toMatch(/\/\*\*[\s\S]*_replace_vars\?: Array</);
   });
 });
 
@@ -156,7 +156,7 @@ describe("analyzeEntities — JSON fields", () => {
 //
 // Note the payload is the *bare* `<Target>Input` — a type of its own, distinct
 // from `Update<Target>Input` and `Create<Target>Input`. It carries `id` and
-// `__search_value` (so a nested row can be identified) plus the target's own
+// `_search_value` (so a nested row can be identified) plus the target's own
 // scalars and relation keys, which makes it recursive.
 describe("generateIndexFile — relation mutation fields", () => {
   const contactToCompany = {
@@ -190,7 +190,7 @@ describe("generateIndexFile — relation mutation fields", () => {
     analyzeEntities([relContact, company]),
     "@pylo/node",
   );
-  // Slice to the next declaration, not the next `}` — `__search_value` is an
+  // Slice to the next declaration, not the next `}` — `_search_value` is an
   // inline object type, so it closes a brace of its own mid-interface.
   const block = (name: string) => {
     const start = out.indexOf(`export interface ${name} {`);
@@ -209,7 +209,7 @@ describe("generateIndexFile — relation mutation fields", () => {
   it("gives <Entity>Input the identifier keys and the entity's scalars", () => {
     const contactInput = block("ContactInput");
     expect(contactInput).toContain("id?: string;");
-    expect(contactInput).toContain("__search_value?:");
+    expect(contactInput).toContain("_search_value?:");
     expect(contactInput).toContain("first_name?: string | null;");
   });
 
@@ -903,7 +903,7 @@ describe("generateIndexFile — is_writeable", () => {
     expect(inputs).not.toContain("generated_at?:");
   });
 
-  it("keeps it out of __replace_vars", () => {
+  it("keeps it out of _replace_vars", () => {
     expect(out()).not.toContain("'generated_at'");
   });
 });

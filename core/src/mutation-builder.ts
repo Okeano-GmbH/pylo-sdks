@@ -32,7 +32,7 @@ export function buildUpsertMutation(
   };
 }
 
-// Batch upsert: upserts each element (rows without an `id`/`__search_value` are
+// Batch upsert: upserts each element (rows without an `id`/`_search_value` are
 // created) inside a single all-or-nothing transaction and returns the affected
 // rows as a list.
 export function buildBulkUpsertMutation(

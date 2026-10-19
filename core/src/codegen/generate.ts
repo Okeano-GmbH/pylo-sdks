@@ -70,7 +70,7 @@ function getVariantFieldNames(fields: AnalyzedField[]): string[] {
 // is settable on an update input and its template variables do get resolved.
 const NON_WRITABLE_FIELDS = new Set(["integer_id", "created_at", "updated_at"]);
 
-// The `__replace_vars` field: a list of the field names whose template
+// The `_replace_vars` field: a list of the field names whose template
 // variables the server should resolve during the upsert. The schema declares it
 // as `[String!]`; narrowing to a union of the entity's own field names is a
 // strict subtype, so it stays wire-compatible while giving autocomplete.
@@ -99,7 +99,7 @@ function generateReplaceVarsField(
     " * Field names whose template variables (e.g. `${replace_uuid.myNewEntity}`) the server",
     " * should resolve to their concrete values during this upsert.",
     " */",
-    `__replace_vars?: Array<${union}>;`,
+    `_replace_vars?: Array<${union}>;`,
   ].join("\n");
 }
 
@@ -133,7 +133,7 @@ function generateEntityRelationsType(entity: AnalyzedEntity): string {
 }
 
 const SEARCH_VALUE_FIELD =
-  "__search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };";
+  "_search_value?: { field: string; value?: string; not_found_behavior?: 'create' | 'ignore' | 'error'; search_in_all_field_variants?: boolean; multiple_results_allowed?: boolean; multiple_results_use_latest?: boolean };";
 
 // The writable scalar columns — `id` and the server-managed ones are handled
 // separately (or not at all).
@@ -178,7 +178,7 @@ function generateRelationFields(entity: AnalyzedEntity): string[] {
 }
 
 // The bare `<Entity>Input` — what every relation key points at. It identifies a
-// row (`id` / `__search_value`) and can create or update it, so it carries the
+// row (`id` / `_search_value`) and can create or update it, so it carries the
 // same body as the update input. Emitted for *every* entity, including virtual
 // ones: they have no mutation endpoints of their own, but relations still
 // target them, so the type has to exist.
@@ -242,9 +242,9 @@ function propertyKey(name: string): string {
 
 // What a template's `entity` input accepts: the record's id, or an object that
 // addresses one. This is not `<Entity>Input` — the renderer does not upsert.
-// It reads `id` / `__search_value` to fetch the record and treats every *other*
+// It reads `id` / `_search_value` to fetch the record and treats every *other*
 // key as an override of the fetched fields for this render, so a relation key
-// or `__replace_vars` would silently land in the rendered output.
+// or `_replace_vars` would silently land in the rendered output.
 //
 // An entity the schema no longer has (a template written against a renamed one)
 // falls back to the id alone rather than to a type that would not compile.
@@ -274,7 +274,7 @@ function referencedEntities(
   return entities.filter((e) => referenced.has(e.pascalName.toLowerCase()));
 }
 
-// `__search_value` is narrower here than on an upsert input: the renderer reads
+// `_search_value` is narrower here than on an upsert input: the renderer reads
 // `field` and `value`, and raises when nothing matches. Overrides are typed
 // from the *readable* fields, since what they replace is what was fetched.
 export function generateDocumentRefTypes(
@@ -291,7 +291,7 @@ export function generateDocumentRefTypes(
       " */",
       `export interface ${entity.pascalName}DocumentRef {`,
       "  id?: string;",
-      "  __search_value?: { field: string; value?: string };",
+      "  _search_value?: { field: string; value?: string };",
     );
     for (const field of readableFields(entity)) {
       if (field.name === "id") continue;

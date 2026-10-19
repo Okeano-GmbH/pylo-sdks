@@ -233,7 +233,7 @@ describe("generateIndexFile — PyloDocumentTemplates", () => {
   });
 });
 
-// The renderer reads `id` / `__search_value` to fetch the record and treats
+// The renderer reads `id` / `_search_value` to fetch the record and treats
 // every other key as an override of what it fetched — so this is not the
 // entity's upsert input, whose relation keys would land in the output verbatim.
 describe("generateIndexFile — <Entity>DocumentRef", () => {
@@ -254,14 +254,14 @@ describe("generateIndexFile — <Entity>DocumentRef", () => {
 
     expect(out).toContain("export interface EinwilligungDocumentRef {");
     expect(out).toContain("  id?: string;");
-    expect(out).toContain("  __search_value?: { field: string; value?: string };");
+    expect(out).toContain("  _search_value?: { field: string; value?: string };");
     expect(out).toContain("  name?: string | null;");
     // Nothing that would be written rather than overridden.
     const block = out.slice(
       out.indexOf("export interface EinwilligungDocumentRef"),
       out.indexOf("}", out.indexOf("export interface EinwilligungDocumentRef")),
     );
-    expect(block).not.toContain("__replace_vars");
+    expect(block).not.toContain("_replace_vars");
     expect(block).not.toContain("not_found_behavior");
   });
 
