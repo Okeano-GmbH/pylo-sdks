@@ -14,26 +14,26 @@ import type { FilterInput, PaginationData, PaginationInput } from "../src/shared
 type NoRelations = Record<never, never>;
 
 // Mirrors the shape codegen emits for the mutation inputs: the scalar fields,
-// the id/__search_value identifiers, and one `<relation><suffix>` key per
+// the id/_search_value identifiers, and one `<relation><suffix>` key per
 // relation suffix, each carrying the bare `<Target>Input` — `CompanyInput` for
 // a hasOne `_set`, `ContactInput[]` for the hasMany suffixes, exactly as the
 // GraphQL schema declares them. The bare input doubles as the update input.
 type SearchValue = { field: string; value?: string };
 interface CompanyInput {
   id?: string;
-  __search_value?: SearchValue;
+  _search_value?: SearchValue;
   name?: string;
 }
 interface ContactInput {
   id?: string;
-  __search_value?: SearchValue;
+  _search_value?: SearchValue;
   name?: string;
   email?: string;
   company_set?: CompanyInput;
 }
 interface NoteInput {
   id?: string;
-  __search_value?: SearchValue;
+  _search_value?: SearchValue;
   body?: string;
   contacts_set?: ContactInput[];
   contacts_connect?: ContactInput[];
@@ -296,9 +296,9 @@ describe("upsert relation input", () => {
     await notes.upsert({ contacts_set: [{ emial: "a@b.c" }] });
   });
 
-  it("still allows identifying a relation row by __search_value", async () => {
+  it("still allows identifying a relation row by _search_value", async () => {
     await contacts.upsert({
-      company_set: { __search_value: { field: "name", value: "Acme" } },
+      company_set: { _search_value: { field: "name", value: "Acme" } },
     });
   });
 

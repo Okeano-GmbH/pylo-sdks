@@ -12,7 +12,7 @@ interface Schema {
 
 interface EinwilligungDocumentRef {
   id?: string;
-  __search_value?: { field: string; value?: string };
+  _search_value?: { field: string; value?: string };
   name?: string | null;
 }
 
@@ -41,7 +41,7 @@ describe("documents.generate — typing", () => {
     ).toEqualTypeOf<PyloRenderedDocument>();
 
     await pylo.documents.generate("einwilligung-optik", {
-      einwilligung: { __search_value: { field: "name", value: "1234" }, name: "1234" },
+      einwilligung: { _search_value: { field: "name", value: "1234" }, name: "1234" },
       signed_on: "2026-09-07",
       note: "optional",
     });

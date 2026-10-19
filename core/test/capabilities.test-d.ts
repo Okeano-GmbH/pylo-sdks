@@ -11,7 +11,7 @@ type NoRelations = Record<never, never>;
 type SearchValue = { field: string; value?: string };
 interface ProjectInput {
   id?: string;
-  __search_value?: SearchValue;
+  _search_value?: SearchValue;
   title?: string;
 }
 

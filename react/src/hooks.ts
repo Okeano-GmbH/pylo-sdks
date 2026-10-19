@@ -502,7 +502,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   }
 
   // Upserts many rows of one entity in a single all-or-nothing transaction.
-  // Rows without an `id`/`__search_value` are created; the ids of the affected
+  // Rows without an `id`/`_search_value` are created; the ids of the affected
   // rows are returned in input order.
   function usePyloBulkUpsert<E extends EntityNameWith<S, "bulkUpsert">>(
     entity: E,

@@ -166,7 +166,7 @@ interface FullEntityClient<S, E extends EntityName<S>> {
   upsert(input: UpsertInput<S, E>, options?: MutationRequestOptions): Promise<{ id: string }>;
 
   // Upserts many rows in a single all-or-nothing transaction. Each element is
-  // upserted individually — rows without an `id`/`__search_value` are created —
+  // upserted individually — rows without an `id`/`_search_value` are created —
   // and the ids of the affected rows are returned in input order.
   bulkUpsert(
     inputs: UpsertInput<S, E>[],
@@ -264,7 +264,7 @@ export interface DocumentsClient<T> {
   //
   // The variables are checked against the template's own inputs: an entity
   // input takes the record's id, or an object that identifies one (`id` or
-  // `__search_value`) whose other keys override the fetched fields for this
+  // `_search_value`) whose other keys override the fetched fields for this
   // render.
   generate<K extends DocumentTemplateName<T>>(
     template: K,
