@@ -59,6 +59,7 @@ import type {
   EventMetricInput,
   MetricValue,
   PaginationData,
+  PaginationSelect,
   PyloEvent,
   PyloEventInput,
   EventListOptions,
@@ -79,6 +80,7 @@ import type {
   ByIdOptions,
   ListResult,
   SelectConstraint,
+  ListSelectConstraint,
   EntityMethodName,
   UpsertInput,
   RequestOptions,
@@ -152,9 +154,9 @@ export type AggregateOnlyClient<S, E extends EntityName<S>> = EntityAggregateApi
 
 // Every generic method, before the entity's own capabilities narrow it down.
 interface FullEntityClient<S, E extends EntityName<S>> {
-  list<Sel extends SelectConstraint<S, E, Sel>>(
+  list<Sel extends ListSelectConstraint<S, E, Sel>>(
     options: ListOptions<S, E, Sel> & RequestOptions,
-  ): Promise<ListResult<EntityResult<S, E, Sel>>>;
+  ): Promise<ListResult<EntityResult<S, E, Sel>, Sel>>;
 
   byId<Sel extends SelectConstraint<S, E, Sel>>(
     id: string,
@@ -199,7 +201,9 @@ export type IngestEvents = (
 export interface EventsClient {
   // List raw events, or — when `filter.dimensions` / `interval` / `group_by`
   // are set — grouped/analytics rows plus grand-total `aggregations`.
-  list(options?: EventListOptions & RequestOptions): Promise<PyloEventListResult>;
+  list<PS extends PaginationSelect = Record<never, never>>(
+    options?: EventListOptions<PS> & RequestOptions,
+  ): Promise<PyloEventListResult<PS>>;
 
   // Aggregate the event store. Identical in shape to `<entity>.aggregate`, and
   // returns the same `{ rows, total }` — the underlying endpoint's `data` /
@@ -471,7 +475,7 @@ function createEntityClient<S, E extends EntityName<S>>(
         options as unknown as Record<string, unknown>,
       );
 
-      const data = await executeGraphQL<Record<string, { data: unknown[]; pagination: PaginationData }>>(
+      const data = await executeGraphQL<Record<string, { data: unknown[]; pagination?: PaginationData }>>(
         endpoint,
         query,
         variables,
@@ -486,7 +490,7 @@ function createEntityClient<S, E extends EntityName<S>>(
       }
 
       // Runtime returns raw data; type safety is at the generic layer
-      return { data: result.data, pagination: result.pagination } as never;
+      return result as never;
     },
 
     async byId(id, options) {
@@ -676,7 +680,7 @@ function createEventsClient(
         throw new PyloError("Unexpected response shape — missing pyloEventList");
       }
 
-      return result;
+      return result as never;
     },
 
     async aggregate(options) {

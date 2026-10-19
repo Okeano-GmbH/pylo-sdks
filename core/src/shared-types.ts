@@ -76,6 +76,20 @@ export interface PaginationData {
   has_more_pages: boolean;
 }
 
+export type PaginationSelect = { [K in keyof PaginationData]?: true };
+
+export type SelectedPagination<PS> = {
+  [K in keyof PS & keyof PaginationData]: PaginationData[K];
+};
+
+// A list result carries `pagination` only when its select has a non-empty
+// `_pagination`, and then only the fields it names.
+export type WithPagination<Sel> = Sel extends { _pagination: infer PS }
+  ? [keyof PS & keyof PaginationData] extends [never]
+    ? unknown
+    : { pagination: SelectedPagination<PS> }
+  : unknown;
+
 export interface SearchValueInput {
   field: string;
   value?: string;
@@ -140,9 +154,11 @@ export interface EventListFilterInput {
   limit?: number;
 }
 
-export interface EventListOptions {
+export interface EventListOptions<PS extends PaginationSelect = PaginationSelect> {
   filter?: EventListFilterInput;
   pagination?: PaginationInput;
+  // Events have no `select`, so the pagination fields are picked here.
+  _pagination?: PS;
   // Restrict the returned columns in list mode (top-level columns or dotted
   // property paths). Ignored in grouped/analytics mode.
   select_fields?: string[];
@@ -158,13 +174,12 @@ export interface EventListOptions {
 // Rows are plain JSON objects. In list mode: `{ event_name, ts, properties, ... }`
 // (or just the `select_fields`). In grouped mode: one row per group with the
 // dimension keys (or `bucket` for a time bucket) plus the metric aliases.
-export interface PyloEventListResult {
+export type PyloEventListResult<PS = Record<never, never>> = {
   data: Array<Record<string, unknown>>;
-  pagination: PaginationData;
   // Grand total over the full filtered set; `{ <alias>: number, ... }` or null
   // when no `aggregate` metrics were requested.
   aggregations: Record<string, unknown> | null;
-}
+} & WithPagination<{ _pagination: PS }>;
 
 // An inferred property path and its JSON type, derived from recent events.
 export interface PyloEventProperty {

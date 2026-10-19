@@ -40,13 +40,25 @@ interface ByIdOptionsInput {
   select?: unknown;
 }
 
-const PAGINATION_FIELDS = `pagination {
-    total
-    current_page
-    per_page
-    last_page
-    has_more_pages
-  }`;
+const PAGINATION_FIELDS = [
+  "total",
+  "current_page",
+  "per_page",
+  "last_page",
+  "has_more_pages",
+] as const;
+
+// The select key for a list's `pagination { … }` block. The backend rejects
+// field names starting with `_`, so it can't collide with an entity field.
+const PAGINATION_KEY = "_pagination";
+
+function paginationBlock(select: unknown): string {
+  if (!select || typeof select !== "object") return "";
+  const fields = PAGINATION_FIELDS.filter(
+    (field) => (select as Record<string, unknown>)[field] === true,
+  );
+  return fields.length > 0 ? `pagination { ${fields.join(" ")} }` : "";
+}
 
 // Builds a GraphQL selection set from a runtime `select` object, using
 // conventions instead of schema metadata:
@@ -55,9 +67,9 @@ const PAGINATION_FIELDS = `pagination {
 //                                `{ data { value variant is_default } }`
 //                                sub-selection).
 //   - `key: { select, … }`     → a relation; emitted as `key { data { … } }`,
-//                                with a `pagination { … }` block only when a
-//                                `pagination` key is supplied (opt-in, so the
-//                                runtime needn't know hasOne vs hasMany).
+//                                plus the `pagination { … }` fields its
+//                                `select._pagination` asks for.
+//   - `_pagination`            → skipped; the enclosing list emits it.
 function buildSelectionSet(
   select: SelectObject,
   variables: Record<string, unknown>,
@@ -67,6 +79,8 @@ function buildSelectionSet(
   const fields: string[] = [];
 
   for (const [key, value] of Object.entries(select)) {
+    if (key === PAGINATION_KEY) continue;
+
     if (value === true) {
       if (key.endsWith(VARIANT_SUFFIX)) {
         fields.push(`${key} ${VARIANT_SELECTION}`);
@@ -89,10 +103,7 @@ function buildSelectionSet(
       argParts.push(`filter: $${varName}`);
     }
 
-    // Pagination is opt-in: its presence both passes the argument and adds the
-    // `pagination { … }` response block.
-    const wantsPagination = relation.pagination !== undefined;
-    if (wantsPagination) {
+    if (relation.pagination !== undefined) {
       const varName = `${prefix}${key}_pagination`;
       variables[varName] = relation.pagination;
       variableTypes.set(varName, "PaginationInput");
@@ -112,11 +123,8 @@ function buildSelectionSet(
       `${prefix}${key}_`,
     );
 
-    if (wantsPagination) {
-      fields.push(`${key}${args} { data { ${nestedSelection} } ${PAGINATION_FIELDS} }`);
-    } else {
-      fields.push(`${key}${args} { data { ${nestedSelection} } }`);
-    }
+    const block = paginationBlock(relation.select[PAGINATION_KEY]);
+    fields.push(`${key}${args} { data { ${nestedSelection} }${block ? ` ${block}` : ""} }`);
   }
 
   return fields.join("\n    ");
@@ -176,13 +184,14 @@ export function buildListQuery(
   const argSection = argParts.length > 0 ? `(${argParts.join(", ")})` : "";
 
   const queryName = `${entityKey}List`;
+  const block = paginationBlock(select[PAGINATION_KEY]);
+  const paginationSection = block ? `\n    ${block}` : "";
 
   const query = `query ${capitalize(entityKey)}List${varSection} {
   ${queryName}${argSection} {
     data {
       ${selectionSet}
-    }
-    ${PAGINATION_FIELDS}
+    }${paginationSection}
   }
 }`;
 
@@ -226,7 +235,7 @@ export function capitalize(str: string): string {
 
 // Maps each pyloEventList argument to its GraphQL type. Only the args actually
 // present on the options object are declared/passed, so the query stays minimal.
-const EVENT_LIST_ARG_TYPES: Record<keyof EventListOptions, string> = {
+const EVENT_LIST_ARG_TYPES: Record<Exclude<keyof EventListOptions, "_pagination">, string> = {
   filter: "EventListFilterInput",
   pagination: "PaginationInput",
   select_fields: "[String!]",
@@ -235,16 +244,6 @@ const EVENT_LIST_ARG_TYPES: Record<keyof EventListOptions, string> = {
   group_by: "[String!]",
   startTime: "String",
 };
-
-const EVENT_LIST_DATA = `data
-    pagination {
-      total
-      current_page
-      per_page
-      last_page
-      has_more_pages
-    }
-    aggregations`;
 
 // The backend schema declares `TimeBucketInput.field` as required (`String!`),
 // even though the resolver defaults a missing field to the native `ts` column.
@@ -270,7 +269,7 @@ export function buildEventListQuery(
   const varDecls: string[] = [];
   const argParts: string[] = [];
 
-  for (const key of Object.keys(EVENT_LIST_ARG_TYPES) as Array<keyof EventListOptions>) {
+  for (const key of Object.keys(EVENT_LIST_ARG_TYPES) as Array<keyof typeof EVENT_LIST_ARG_TYPES>) {
     const value = options?.[key];
     if (value === undefined) continue;
     variables[key] = key === "filter" ? normalizeEventFilter(value as EventListFilterInput) : value;
@@ -281,9 +280,13 @@ export function buildEventListQuery(
   const varSection = varDecls.length > 0 ? `(${varDecls.join(", ")})` : "";
   const argSection = argParts.length > 0 ? `(${argParts.join(", ")})` : "";
 
+  const block = paginationBlock(options?._pagination);
+  const paginationSection = block ? `\n    ${block}` : "";
+
   const query = `query PyloEventList${varSection} {
   pyloEventList${argSection} {
-    ${EVENT_LIST_DATA}
+    data${paginationSection}
+    aggregations
   }
 }`;
 

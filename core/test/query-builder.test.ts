@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildListQuery,
   buildByIdQuery,
+  buildEventListQuery,
   buildMeQuery,
   capitalize,
 } from "../src/query-builder.js";
@@ -10,20 +11,50 @@ import {
 // indentation/newlines.
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
-// Each pagination block contains exactly one `has_more_pages`, so counting it
-// tells us how many pagination blocks a query emits. Top-level list always
-// emits one; a nested hasMany with `pagination` adds a second.
-const paginationBlocks = (q: string) => q.match(/has_more_pages/g)?.length ?? 0;
+const paginationBlocks = (q: string) => q.match(/pagination \{/g)?.length ?? 0;
 
 describe("buildListQuery", () => {
-  it("emits scalar fields and the top-level pagination block", () => {
+  it("emits scalar fields without a pagination block by default", () => {
     const { query, variables } = buildListQuery("contact", {
       select: { name: true },
     });
-    expect(norm(query)).toContain("contactList");
-    expect(norm(query)).toContain("data { name }");
-    expect(paginationBlocks(query)).toBe(1);
+    expect(norm(query)).toContain("contactList { data { name } } }");
+    expect(paginationBlocks(query)).toBe(0);
     expect(variables).toEqual({});
+  });
+
+  it("selects only the requested pagination fields", () => {
+    const { query, variables } = buildListQuery("contact", {
+      select: { name: true, _pagination: { has_more_pages: true, current_page: true } },
+      pagination: { page: 2 },
+    });
+    expect(norm(query)).toContain("} pagination { current_page has_more_pages } } }");
+    expect(variables).toEqual({ pagination: { page: 2 } });
+  });
+
+  it("sends page arguments without selecting pagination fields", () => {
+    const { query, variables } = buildListQuery("contact", {
+      select: { name: true },
+      pagination: { page: 2 },
+    });
+    expect(norm(query)).toContain("contactList(pagination: $pagination)");
+    expect(paginationBlocks(query)).toBe(0);
+    expect(variables).toEqual({ pagination: { page: 2 } });
+  });
+
+  it("selects pagination fields without sending page arguments", () => {
+    const { query, variables } = buildListQuery("contact", {
+      select: { name: true, _pagination: { total: true } },
+    });
+    expect(norm(query)).toContain("contactList { data { name } pagination { total } } }");
+    expect(variables).toEqual({});
+  });
+
+  it("ignores unknown and false pagination fields", () => {
+    const { query } = buildListQuery("contact", {
+      select: { name: true, _pagination: { total: false, nope: true } },
+    });
+    expect(paginationBlocks(query)).toBe(0);
   });
 
   it("expands variant fields with their data/value/variant sub-selection", () => {
@@ -38,16 +69,22 @@ describe("buildListQuery", () => {
       select: { company: { select: { name: true } } },
     });
     expect(norm(query)).toContain("company { data { name } }");
-    expect(paginationBlocks(query)).toBe(1); // top-level only
+    expect(paginationBlocks(query)).toBe(0);
   });
 
-  it("emits a nested pagination block + arg when pagination is supplied", () => {
+  it("emits a nested pagination arg and the selected fields", () => {
     const { query, variables } = buildListQuery("contact", {
-      select: { items: { select: { id: true }, pagination: { per_page: 10 } } },
+      select: {
+        items: {
+          select: { id: true, _pagination: { total: true } },
+          pagination: { per_page: 10 },
+        },
+      },
     });
-    expect(norm(query)).toContain("items(pagination: $r_items_pagination) { data { id }");
+    expect(norm(query)).toContain(
+      "items(pagination: $r_items_pagination) { data { id } pagination { total } }",
+    );
     expect(norm(query)).toContain("$r_items_pagination: PaginationInput");
-    expect(paginationBlocks(query)).toBe(2); // top-level + nested
     expect(variables).toEqual({ r_items_pagination: { per_page: 10 } });
   });
 
@@ -56,7 +93,7 @@ describe("buildListQuery", () => {
       select: { items: { select: { id: true } } },
     });
     expect(norm(query)).toContain("items { data { id } }");
-    expect(paginationBlocks(query)).toBe(1); // top-level only
+    expect(paginationBlocks(query)).toBe(0);
   });
 
   it("wires a relation filter into a typed variable", () => {
@@ -94,6 +131,25 @@ describe("buildListQuery", () => {
     expect(() => buildListQuery("contact", { select: {} })).toThrow(
       /requires an explicit 'select'/,
     );
+  });
+});
+
+describe("buildEventListQuery", () => {
+  it("omits the pagination block by default", () => {
+    const { query } = buildEventListQuery({ select_fields: ["ts"] });
+    expect(norm(query)).toContain("{ data aggregations }");
+    expect(paginationBlocks(query)).toBe(0);
+  });
+
+  it("sends page arguments and the selected pagination fields", () => {
+    const { query, variables } = buildEventListQuery({
+      pagination: { page: 2 },
+      _pagination: { has_more_pages: true },
+    });
+    expect(norm(query)).toContain(
+      "pyloEventList(pagination: $pagination) { data pagination { has_more_pages } aggregations }",
+    );
+    expect(variables).toEqual({ pagination: { page: 2 } });
   });
 });
 

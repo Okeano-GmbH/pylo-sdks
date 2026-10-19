@@ -52,17 +52,20 @@ import type {
 } from "@pylo/core";
 import type {
   PaginationData,
+  PaginationSelect,
+  WithPagination,
   PyloEvent,
   PyloEventInput,
   FilterInput,
   EntityName,
   EntityNameWith,
-  EntitySelect,
   EntityResult,
   ListOptions,
   ByIdOptions,
   UpsertInput,
   SelectConstraint,
+  ListSelect,
+  ListSelectConstraint,
   RequestOptions,
   MutationRequestOptions,
   EventListOptions,
@@ -86,23 +89,37 @@ interface HooksOptions {
   headers?: Record<string, string>;
 }
 
-export interface ListHookResult<T> {
+// `pagination` carries the fields `select._pagination` asked for, and is
+// undefined until the first page loads.
+export type ListHookResult<T, Sel = unknown> = {
   data: T[] | undefined;
-  pagination: PaginationData | undefined;
   isLoading: boolean;
   error: Error | null;
   refetch: UseQueryResult["refetch"];
-}
+} & (WithPagination<Sel> extends { pagination: infer D }
+  ? { pagination: D | undefined }
+  : unknown);
 
-export type InfiniteListOptions<S, E extends EntityNameWith<S, "list">, Sel extends EntitySelect<S, E>> = {
+// The hook owns the page arguments and always selects the fields it pages
+// with; `select._pagination` adds to them.
+export type InfiniteListOptions<S, E extends EntityNameWith<S, "list">, Sel extends ListSelect<S, E>> = {
   perPage?: number;
   select: Sel;
   filter?: FilterInput;
 } & RequestOptions;
 
+type InfinitePagination<Sel> = Pick<
+  PaginationData,
+  | "current_page"
+  | "has_more_pages"
+  | (Sel extends { _pagination: infer PS } ? keyof PS & keyof PaginationData : never)
+>;
+
+const INFINITE_PAGINATION_SELECT = { current_page: true, has_more_pages: true } as const;
+
 interface PageData {
   data: unknown[];
-  pagination: PaginationData;
+  pagination: Pick<PaginationData, "current_page" | "has_more_pages">;
 }
 
 export interface UploadHookOptions<S> {
@@ -154,11 +171,11 @@ export function createPyloHooks<S>(options?: HooksOptions) {
 
   function usePyloList<
     E extends EntityNameWith<S, "list">,
-    const Sel extends SelectConstraint<S, E, Sel>,
+    const Sel extends ListSelectConstraint<S, E, Sel>,
   >(
     entity: E,
     queryOptions: ListOptions<S, E, Sel> & RequestOptions,
-  ): ListHookResult<EntityResult<S, E, Sel>> {
+  ): ListHookResult<EntityResult<S, E, Sel>, Sel> {
     const transport = useTransport();
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     const queryKey = [
@@ -183,7 +200,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
 
         const data = (await transport(query, variables, merged)) as Record<
           string,
-          { data: unknown[]; pagination: PaginationData }
+          { data: unknown[]; pagination?: PaginationData }
         >;
 
         const listKey = `${entity as string}List`;
@@ -193,16 +210,16 @@ export function createPyloHooks<S>(options?: HooksOptions) {
 
     return {
       data: (result.data?.data ?? undefined) as EntityResult<S, E, Sel>[] | undefined,
-      pagination: result.data?.pagination,
+      ...("_pagination" in queryOptions.select && { pagination: result.data?.pagination }),
       isLoading: result.isLoading,
       error: result.error,
       refetch: result.refetch,
-    };
+    } as ListHookResult<EntityResult<S, E, Sel>, Sel>;
   }
 
   function usePyloInfiniteList<
     E extends EntityNameWith<S, "list">,
-    const Sel extends SelectConstraint<S, E, Sel>,
+    const Sel extends ListSelectConstraint<S, E, Sel>,
   >(
     entity: E,
     infiniteOptions: InfiniteListOptions<S, E, Sel>,
@@ -210,7 +227,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     data: Array<EntityResult<S, E, Sel>>;
     pages: Array<{
       data: Array<EntityResult<S, E, Sel>>;
-      pagination: PaginationData;
+      pagination: InfinitePagination<Sel>;
     }>;
   }> {
     const transport = useTransport();
@@ -230,8 +247,12 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         },
       ],
       queryFn: async ({ pageParam }: { pageParam: number }) => {
+        const select = infiniteOptions.select as { _pagination?: object };
         const runtimeOptions = {
-          select: infiniteOptions?.select,
+          select: {
+            ...select,
+            _pagination: { ...select._pagination, ...INFINITE_PAGINATION_SELECT },
+          },
           filter: infiniteOptions?.filter,
           pagination: { page: pageParam, per_page: perPage },
         };
@@ -266,7 +287,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
           data: allData,
           pages: queryData.pages as Array<{
             data: Array<EntityResult<S, E, Sel>>;
-            pagination: PaginationData;
+            pagination: InfinitePagination<Sel>;
           }>,
         };
       },
@@ -274,7 +295,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
       data: Array<EntityResult<S, E, Sel>>;
       pages: Array<{
         data: Array<EntityResult<S, E, Sel>>;
-        pagination: PaginationData;
+        pagination: InfinitePagination<Sel>;
       }>;
     }>;
   }
@@ -604,9 +625,9 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   // Reads custom events. In list mode returns raw event rows; when
   // `filter.dimensions` / `interval` / `group_by` are set, returns grouped
   // rows plus grand-total `aggregations`.
-  function usePyloEventList(
-    queryOptions?: EventListOptions & RequestOptions,
-  ): UseQueryResult<PyloEventListResult> {
+  function usePyloEventList<PS extends PaginationSelect = Record<never, never>>(
+    queryOptions?: EventListOptions<PS> & RequestOptions,
+  ): UseQueryResult<PyloEventListResult<PS>> {
     const transport = useTransport();
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
     return useQuery({
@@ -616,7 +637,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
 
         const data = (await transport(query, variables, merged)) as Record<
           string,
-          PyloEventListResult
+          PyloEventListResult<PS>
         >;
 
         return data["pyloEventList"]!;

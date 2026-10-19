@@ -4,8 +4,9 @@ import type {
   AggregateFilterInput,
   AggregateInterval,
   FilterInput,
-  PaginationData,
   PaginationInput,
+  PaginationSelect,
+  WithPagination,
 } from "./shared-types.js";
 
 // Extract entity key strings from a PyloSchema
@@ -109,7 +110,8 @@ type OmitNever<T> = {
 // there is no `true` "expand all fields" shortcut.
 // Scalar fields → `true`
 // hasOne relations → `{ select, filter? }`
-// hasMany relations → `{ select, filter?, pagination? }`
+// hasMany relations → `{ select, filter?, pagination? }`, where `select` may
+//   also hold `_pagination`
 export type EntitySelect<S, E extends EntityName<S>> = OmitNever<{
   [K in keyof EntityFields<S, E>]?: true;
 }> &
@@ -130,7 +132,7 @@ export type EntitySelect<S, E extends EntityName<S>> = OmitNever<{
           }
         ? Target extends EntityName<S>
           ? {
-              select: EntitySelect<S, Target>;
+              select: ListSelect<S, Target>;
               filter?: FilterInput;
               pagination?: PaginationInput;
             }
@@ -138,11 +140,17 @@ export type EntitySelect<S, E extends EntityName<S>> = OmitNever<{
         : never;
   };
 
+// The select of a list: entity fields plus `_pagination`, the fields of the
+// list's `pagination` block. The `_` prefix is reserved, so it can't name a field.
+export type ListSelect<S, E extends EntityName<S>> = EntitySelect<S, E> & {
+  _pagination?: PaginationSelect;
+};
+
 // Compute return type from a select object.
 // - Scalar field with `true` → field's type from schema
 // - hasOne relation → `{ data: TargetResult } | null`
-// - hasMany relation → `{ data: TargetResult[] }`, plus `pagination` only when a
-//   `pagination` key was supplied in the select
+// - hasMany relation → `{ data: TargetResult[] }`, plus the `pagination` fields
+//   its `_pagination` asked for
 export type EntityResult<
   S,
   E extends EntityName<S>,
@@ -164,8 +172,7 @@ type ScalarResult<
 };
 
 // Compute relation fields from select. Relations are always explicit objects
-// `{ select, … }`; hasMany results carry `pagination` only when a `pagination`
-// key was supplied (matching the opt-in runtime query builder).
+// `{ select, … }`.
 type RelationResult<
   S,
   E extends EntityName<S>,
@@ -194,9 +201,7 @@ type RelationResult<
           ? SubSelect extends EntitySelect<S, Target>
             ? {
                 data: Array<EntityResult<S, Target, SubSelect>>;
-              } & (Select[K] extends { pagination: unknown }
-                ? { pagination: PaginationData }
-                : unknown)
+              } & WithPagination<SubSelect>
             : never
           : never
         : never
@@ -215,12 +220,15 @@ export type SelectConstraint<S, E extends EntityName<S>, Sel> = EntitySelect<
 > &
   NoExcess<Sel, EntitySelect<S, E>>;
 
+export type ListSelectConstraint<S, E extends EntityName<S>, Sel> = ListSelect<S, E> &
+  NoExcess<Sel, ListSelect<S, E>>;
+
 // Options for list queries. `select` is required — there is no implicit
 // "all fields" default.
 export type ListOptions<
   S,
   E extends EntityName<S>,
-  Sel extends EntitySelect<S, E>,
+  Sel extends ListSelect<S, E>,
 > = {
   select: Sel;
   filter?: FilterInput;
@@ -236,11 +244,7 @@ export type ByIdOptions<
   select: Sel;
 };
 
-// List result with pagination
-export interface ListResult<T> {
-  data: T[];
-  pagination: PaginationData;
-}
+export type ListResult<T, Sel = unknown> = { data: T[] } & WithPagination<Sel>;
 
 // Transport-level options for individual operations
 export interface RequestOptions {

@@ -5,7 +5,7 @@ import type {
   UpsertInput,
 } from "../src/types.js";
 import type { EntityClient, PyloClient } from "../src/client.js";
-import type { FilterInput, PaginationData } from "../src/shared-types.js";
+import type { FilterInput, PaginationData, PaginationInput } from "../src/shared-types.js";
 
 // A hand-written schema mirroring the shape codegen emits for `PyloSchema`.
 // Codegen emits `relations: {}` for entities with no relations; `keyof {}` is
@@ -126,13 +126,22 @@ describe("EntityResult", () => {
     }>();
   });
 
-  it("includes pagination on a hasMany relation when requested", () => {
+  it("omits pagination on a hasMany relation with page arguments only", () => {
     const sel = {
       contacts: { select: { id: true }, pagination: { per_page: 5 } },
     } satisfies Select<"note">;
+    expectTypeOf<Result<"note", typeof sel>["contacts"]>().toEqualTypeOf<{
+      data: Array<{ id: string }>;
+    }>();
+  });
+
+  it("includes the selected pagination fields on a hasMany relation", () => {
+    const sel = {
+      contacts: { select: { id: true, _pagination: { last_page: true } } },
+    } satisfies Select<"note">;
     expectTypeOf<
-      Result<"note", typeof sel>["contacts"]
-    >().toHaveProperty("pagination");
+      Result<"note", typeof sel>["contacts"]["pagination"]
+    >().toEqualTypeOf<{ last_page: number }>();
   });
 });
 
@@ -157,13 +166,32 @@ describe("EntityClient select inference", () => {
     const { data } = await notes.list({
       select: {
         id: true,
-        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+        contacts: { select: { name: true, _pagination: { total: true } }, pagination: { per_page: 5 } },
       },
     });
     expectTypeOf(data[0]!.id).toEqualTypeOf<string>();
     expectTypeOf(data[0]!.contacts).toEqualTypeOf<
-      { data: Array<{ name: string }> } & { pagination: PaginationData }
+      { data: Array<{ name: string }> } & { pagination: { total: number } }
     >();
+  });
+
+  it("carries only the selected top-level pagination fields", async () => {
+    const without = await notes.list({ select: { id: true }, pagination: { page: 2 } });
+    expectTypeOf(without).toEqualTypeOf<{ data: Array<{ id: string }> }>();
+
+    const picked = await notes.list({
+      select: { id: true, _pagination: { has_more_pages: true, current_page: true } },
+      pagination: { page: 2 },
+    });
+    expectTypeOf(picked.pagination).toEqualTypeOf<{
+      has_more_pages: boolean;
+      current_page: number;
+    }>();
+  });
+
+  it("rejects `_pagination` on byId, which returns one row", async () => {
+    // @ts-expect-error — no list, so no pagination
+    await notes.byId("id", { select: { id: true, _pagination: { total: true } } });
   });
 
   it("keeps a hasMany relation when `filter` is also selected", async () => {
@@ -183,13 +211,13 @@ describe("EntityClient select inference", () => {
     const row = await notes.byId("id", {
       select: {
         id: true,
-        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+        contacts: { select: { name: true, _pagination: { total: true } }, pagination: { per_page: 5 } },
       },
     });
     expectTypeOf(row).not.toBeNever();
     expectTypeOf(row!.id).toEqualTypeOf<string>();
     expectTypeOf(row!.contacts).toEqualTypeOf<
-      { data: Array<{ name: string }> } & { pagination: PaginationData }
+      { data: Array<{ name: string }> } & { pagination: { total: number } }
     >();
   });
 
@@ -576,10 +604,16 @@ describe("relation nesting depth", () => {
 
   it("keeps pagination opt-in at depth", async () => {
     const withPagination = await nodes.byId("1", {
-      select: { kids: { select: { kids: { select: { name: true }, pagination: { page: 1 } } } } },
+      select: {
+        kids: {
+          select: {
+            kids: { select: { name: true, _pagination: { total: true } }, pagination: { page: 1 } },
+          },
+        },
+      },
     });
     expectTypeOf<HopMany<typeof withPagination>>().toEqualTypeOf<{
-      kids: { data: Array<{ name: string }> } & { pagination: PaginationData };
+      kids: { data: Array<{ name: string }> } & { pagination: { total: number } };
     }>();
 
     const withoutPagination = await nodes.byId("1", {

@@ -41,13 +41,28 @@ describe("usePyloList select inference", () => {
     const { data } = usePyloList("note", {
       select: {
         id: true,
-        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+        contacts: { select: { name: true, _pagination: { total: true } }, pagination: { per_page: 5 } },
       },
     });
     expectTypeOf(data![0]!.id).toEqualTypeOf<string>();
     expectTypeOf(data![0]!.contacts).toEqualTypeOf<
-      { data: Array<{ name: string }> } & { pagination: PaginationData }
+      { data: Array<{ name: string }> } & { pagination: { total: number } }
     >();
+  });
+});
+
+describe("usePyloList pagination", () => {
+  it("has no pagination without a pagination select", () => {
+    const result = usePyloList("note", { select: { id: true }, pagination: { page: 2 } });
+    expectTypeOf<"pagination" extends keyof typeof result ? true : false>().toEqualTypeOf<false>();
+  });
+
+  it("carries only the selected pagination fields", () => {
+    const { pagination } = usePyloList("note", {
+      select: { id: true, _pagination: { has_more_pages: true } },
+      pagination: { page: 2 },
+    });
+    expectTypeOf(pagination).toEqualTypeOf<{ has_more_pages: boolean } | undefined>();
   });
 });
 
@@ -56,13 +71,29 @@ describe("usePyloById select inference", () => {
     const { data } = usePyloById("note", "id", {
       select: {
         id: true,
-        contacts: { select: { name: true }, pagination: { per_page: 5 } },
+        contacts: { select: { name: true, _pagination: { total: true } }, pagination: { per_page: 5 } },
       },
     });
     expectTypeOf(data!).not.toBeNever();
     expectTypeOf(data!.contacts).toEqualTypeOf<
-      { data: Array<{ name: string }> } & { pagination: PaginationData }
+      { data: Array<{ name: string }> } & { pagination: { total: number } }
     >();
+  });
+});
+
+describe("usePyloInfiniteList pagination", () => {
+  it("always carries the fields it pages with", () => {
+    const result = usePyloInfiniteList("note", { select: { id: true } });
+    expectTypeOf(result.data!.pages[0]!.pagination).toEqualTypeOf<
+      Pick<PaginationData, "current_page" | "has_more_pages">
+    >();
+  });
+
+  it("adds the selected pagination fields", () => {
+    const result = usePyloInfiniteList("note", {
+      select: { id: true, _pagination: { total: true } },
+    });
+    expectTypeOf(result.data!.pages[0]!.pagination.total).toEqualTypeOf<number>();
   });
 });
 
