@@ -3,6 +3,8 @@ import type { RawEntity, RawEntityField, RawEntityRelation } from "./fetch-schem
 export interface AnalyzedField {
   name: string;
   tsType: string;
+  // Pylo's own type (`RICHTEXT`, `DATETIME`, …), which `tsType` flattens to `string`.
+  dataType: string;
   nullable: boolean;
   // Whether the field is on the generated output type / input types. Selecting
   // an unreadable field or writing an unwritable one is a server-side error, so
@@ -164,6 +166,7 @@ function analyzeField(
     return {
       name: field.name,
       tsType: typeName,
+      dataType: field.data_type,
       nullable: isNullable(field),
       ...access,
       variantFieldName: hasVariants ? `${field.name}_variants` : null,
@@ -174,6 +177,7 @@ function analyzeField(
   return {
     name: field.name,
     tsType: mapDataType(field.data_type),
+    dataType: field.data_type,
     nullable: isNullable(field),
     ...access,
     variantFieldName: hasVariants ? `${field.name}_variants` : null,
