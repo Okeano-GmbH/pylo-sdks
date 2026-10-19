@@ -1,5 +1,13 @@
 # @pylo/nextjs
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [2ff9c05]
+  - @pylo/core@0.11.0
+  - @pylo/react@0.10.1
+
 ## 0.8.0
 
 ### Minor Changes

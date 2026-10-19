@@ -1,5 +1,16 @@
 # @pylo/node
 
+## 0.9.0
+
+### Minor Changes
+
+- 2ff9c05: `AnalyzedField` now carries `dataType`, Pylo's own field type (`RICHTEXT`, `DATETIME`, `JSON`, …). `tsType` maps several of them to `string`, so this is the only way to tell them apart.
+
+### Patch Changes
+
+- Updated dependencies [2ff9c05]
+  - @pylo/core@0.11.0
+
 ## 0.8.0
 
 ### Minor Changes
