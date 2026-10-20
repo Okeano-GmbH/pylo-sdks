@@ -70,7 +70,7 @@ export type CallableEntityName<S> = EntityNameWith<S, EntityCapability>;
 
 // The client methods an entity exposes, as a union of their names.
 export type EntityMethodName<S, E extends EntityName<S>> =
-  | (HasCapability<S, E, "list"> extends true ? "list" : never)
+  | (HasCapability<S, E, "list"> extends true ? "list" | "subscribe" : never)
   | (HasCapability<S, E, "byId"> extends true ? "byId" : never)
   | (HasCapability<S, E, "create" | "update"> extends true ? "upsert" : never)
   | (HasCapability<S, E, "bulkUpsert"> extends true ? "bulkUpsert" : never)
@@ -242,6 +242,19 @@ export type ByIdOptions<
   Sel extends EntitySelect<S, E>,
 > = {
   select: Sel;
+};
+
+// Options for subscribe. Relation `filter`/`pagination` inside `select` are
+// fixed when the subscription registers.
+export type SubscribeOptions<
+  S,
+  E extends EntityName<S>,
+  Sel extends EntitySelect<S, E>,
+> = {
+  select: Sel;
+  filter?: FilterInput | undefined;
+  // Defaults to all three.
+  on?: readonly ("create" | "update" | "delete")[] | undefined;
 };
 
 export type ListResult<T, Sel = unknown> = { data: T[] } & WithPagination<Sel>;

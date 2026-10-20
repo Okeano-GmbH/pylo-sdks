@@ -70,11 +70,16 @@ function paginationBlock(select: unknown): string {
 //                                plus the `pagination { … }` fields its
 //                                `select._pagination` asks for.
 //   - `_pagination`            → skipped; the enclosing list emits it.
-function buildSelectionSet(
+//
+// With `inline`, relation arguments are written as literals instead of
+// variables: a subscription's selection is replayed by the websocket-service
+// inside its own query, where our variables don't exist.
+export function buildSelectionSet(
   select: SelectObject,
   variables: Record<string, unknown>,
   variableTypes: Map<string, string>,
   prefix: string,
+  inline = false,
 ): string {
   const fields: string[] = [];
 
@@ -95,19 +100,20 @@ function buildSelectionSet(
     const relation = value as RelationSelect;
     const argParts: string[] = [];
 
-    // Handle filter argument
-    if (relation.filter !== undefined) {
-      const varName = `${prefix}${key}_filter`;
-      variables[varName] = relation.filter;
-      variableTypes.set(varName, "FilterInput");
-      argParts.push(`filter: $${varName}`);
-    }
-
-    if (relation.pagination !== undefined) {
-      const varName = `${prefix}${key}_pagination`;
-      variables[varName] = relation.pagination;
-      variableTypes.set(varName, "PaginationInput");
-      argParts.push(`pagination: $${varName}`);
+    for (const [arg, type] of [
+      ["filter", "FilterInput"],
+      ["pagination", "PaginationInput"],
+    ] as const) {
+      const value = relation[arg];
+      if (value === undefined) continue;
+      if (inline) {
+        argParts.push(`${arg}: ${printLiteral(value)}`);
+        continue;
+      }
+      const varName = `${prefix}${key}_${arg}`;
+      variables[varName] = value;
+      variableTypes.set(varName, type);
+      argParts.push(`${arg}: $${varName}`);
     }
 
     const args = argParts.length > 0 ? `(${argParts.join(", ")})` : "";
@@ -121,6 +127,7 @@ function buildSelectionSet(
       variables,
       variableTypes,
       `${prefix}${key}_`,
+      inline,
     );
 
     const block = paginationBlock(relation.select[PAGINATION_KEY]);
@@ -130,7 +137,32 @@ function buildSelectionSet(
   return fields.join("\n    ");
 }
 
-function requireSelect(
+// Keys of FilterInput whose values are enums, which GraphQL writes unquoted.
+const ENUM_KEYS = new Set(["operator", "order"]);
+const ENUM_VALUE = /^[_A-Za-z][_0-9A-Za-z]*$/;
+
+function printLiteral(value: unknown, isEnum = false): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => printLiteral(item, isEnum)).join(", ")}]`;
+  }
+  if (typeof value === "object") {
+    const fields = Object.entries(value as Record<string, unknown>)
+      .filter(([, field]) => field !== undefined)
+      .map(([key, field]) => `${key}: ${printLiteral(field, ENUM_KEYS.has(key))}`);
+    return `{ ${fields.join(", ")} }`;
+  }
+  if (typeof value === "string") {
+    if (!isEnum) return JSON.stringify(value);
+    if (!ENUM_VALUE.test(value)) throw new Error(`Invalid enum value "${value}".`);
+    return value;
+  }
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  throw new Error(`Cannot write ${String(value)} as a GraphQL literal.`);
+}
+
+export function requireSelect(
   entityKey: string,
   operation: string,
   select: unknown,

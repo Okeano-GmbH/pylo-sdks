@@ -64,6 +64,7 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  SubscribeOptions,
   RequestOptions,
   MutationRequestOptions,
   FieldName,
@@ -90,7 +91,22 @@ export {
   buildBulkUpsertMutation,
   buildDeleteMutation,
   buildIngestEventsMutation,
+  buildSubscriptionMutation,
 } from "./mutation-builder.js";
+
+// Realtime
+export { createRealtime } from "./realtime.js";
+export type {
+  RealtimeClient,
+  RealtimeEvent,
+  RealtimeEventKind,
+  RealtimeHandlers,
+  RealtimeOptions,
+  RealtimeStatus,
+  RealtimeSubscribeOptions,
+  RealtimeSubscription,
+  WebSocketConstructor,
+} from "./realtime.js";
 
 // File upload
 export {

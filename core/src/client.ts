@@ -46,6 +46,8 @@ import type {
   PyloUploadedFile,
 } from "./upload.js";
 import { buildGenerateDocumentMutation } from "./documents.js";
+import { createRealtime } from "./realtime.js";
+import type { RealtimeClient, RealtimeHandlers, RealtimeSubscription } from "./realtime.js";
 import type {
   DocumentGenerateOptions,
   DocumentTemplateMap,
@@ -80,6 +82,7 @@ import type {
   ByIdOptions,
   ListResult,
   SelectConstraint,
+  SubscribeOptions,
   ListSelectConstraint,
   EntityMethodName,
   UpsertInput,
@@ -174,6 +177,15 @@ interface FullEntityClient<S, E extends EntityName<S>> {
   ): Promise<{ id: string }[]>;
 
   delete(ids: string[], options?: MutationRequestOptions): Promise<{ success: boolean }>;
+
+  // Streams creates, updates and deletes of rows matching `filter`, each
+  // carrying the row under `select`. Shares one socket with every other
+  // subscription of this client; identical subscriptions share one server
+  // registration.
+  subscribe<Sel extends SelectConstraint<S, E, Sel>>(
+    options: SubscribeOptions<S, E, Sel>,
+    handlers: RealtimeHandlers<EntityResult<S, E, Sel>>,
+  ): RealtimeSubscription;
 }
 
 // What `client.<entity>` exposes: the methods the entity's endpoints support,
@@ -248,7 +260,13 @@ export type Me<S> = "me" extends EntityName<S>
   : never;
 
 // Keys the client reserves for itself. They shadow any entity of the same name.
-type ReservedClientKey = "ingestEvents" | "events" | "me" | "files" | "documents";
+type ReservedClientKey =
+  | "ingestEvents"
+  | "events"
+  | "me"
+  | "files"
+  | "documents"
+  | "realtime";
 
 // Renders the tenant's document templates. Exposed as `client.documents`, a
 // reserved key that shadows any entity of the same name.
@@ -310,6 +328,8 @@ export type PyloClient<S, T = DocumentTemplateMap> = {
   me: Me<S>;
   files: FilesClient<S>;
   documents: DocumentsClient<T>;
+  // The connection behind `<entity>.subscribe`, opened on first use.
+  realtime: RealtimeClient;
 };
 
 export function resolveEndpoint(endpoint?: string): string {
@@ -466,9 +486,14 @@ function createEntityClient<S, E extends EntityName<S>>(
   entityKey: string,
   endpoint: string,
   auth: AuthProvider,
+  getRealtime: () => RealtimeClient,
   globalHeaders?: Record<string, string>,
 ): FullEntityClient<S, E> & EntityAggregateApi<S, E> {
   return {
+    subscribe(options, handlers) {
+      return getRealtime().subscribe(entityKey, options, handlers);
+    },
+
     async list(options) {
       const { query, variables } = buildListQuery(
         entityKey,
@@ -897,6 +922,13 @@ export function createPyloClient<S, T = DocumentTemplateMap>(
   const me = createMe<S>(endpoint, auth, globalHeaders);
   const files = createFilesClient<S>(endpoint, auth, globalHeaders);
   const documents = createDocumentsClient<T>(endpoint, auth, globalHeaders);
+  let realtime: RealtimeClient | undefined;
+  const getRealtime = () =>
+    (realtime ??= createRealtime({
+      request: (query, variables) =>
+        executeGraphQL(endpoint, query, variables, auth, globalHeaders),
+      auth,
+    }));
 
   return new Proxy({} as PyloClient<S, T>, {
     get(_target, prop) {
@@ -906,7 +938,8 @@ export function createPyloClient<S, T = DocumentTemplateMap>(
       if (prop === "me") return me;
       if (prop === "files") return files;
       if (prop === "documents") return documents;
-      return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, globalHeaders);
+      if (prop === "realtime") return getRealtime();
+      return createEntityClient<S, EntityName<S>>(prop, endpoint, auth, getRealtime, globalHeaders);
     },
   });
 }

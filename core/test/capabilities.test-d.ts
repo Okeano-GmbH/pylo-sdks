@@ -100,6 +100,28 @@ describe("PyloClient — capability narrowing", () => {
     expectTypeOf<Client["legacy"]>().toHaveProperty("delete");
   });
 
+  // Subscriptions replay each event through `<entity>List`.
+  it("offers subscribe wherever list is", () => {
+    expectTypeOf<Client["project"]>().toHaveProperty("subscribe");
+    expectTypeOf<Client["usageReport"]>().toHaveProperty("subscribe");
+    expectTypeOf<Client["legacy"]>().toHaveProperty("subscribe");
+  });
+
+  it("types event rows by the subscription's select", () => {
+    const client = {} as Client;
+    client.project.subscribe(
+      { select: { title: true } },
+      {
+        onEvent(event) {
+          expectTypeOf(event.data).toEqualTypeOf<{ title: string } | undefined>();
+          expectTypeOf(event.id).toEqualTypeOf<string>();
+        },
+      },
+    );
+    // @ts-expect-error — unknown field
+    client.project.subscribe({ select: { nope: true } }, { onEvent() {} });
+  });
+
   it("keeps `me` off the entity mapping — it has its own method", () => {
     expectTypeOf<Client["me"]>().toBeFunction();
   });
