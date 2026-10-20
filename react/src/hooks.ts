@@ -115,9 +115,10 @@ function patchableWith(headers: Record<string, string> | undefined): boolean {
   return headers === undefined || Object.keys(headers).length === 0;
 }
 
-// Events are matched to cached rows by id, so a live query always fetches it.
-function withLiveId<T>(select: T, live: boolean | undefined): T {
-  return live ? { ...select, id: true } : select;
+// Live events are matched to cached rows by id. Fetched whether or not the
+// query is live, so turning `live` on can rely on rows already in the cache.
+function withId<T>(select: T): T {
+  return { ...select, id: true };
 }
 
 // A row inserted live shifts the server's offsets, so the next page can
@@ -321,7 +322,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
       queryFn: async () => {
         const { query, variables } = buildListQuery(entity as string, {
           ...queryOptions,
-          select: withLiveId(queryOptions.select, queryOptions.live),
+          select: withId(queryOptions.select),
         } as unknown as Record<string, unknown>);
 
         const data = (await transport(query, variables, merged)) as Record<
@@ -411,7 +412,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         const select = infiniteOptions.select as { _pagination?: object };
         const runtimeOptions = {
           select: {
-            ...withLiveId(select, infiniteOptions.live),
+            ...withId(select),
             _pagination: { ...select._pagination, ...INFINITE_PAGINATION_SELECT },
           },
           filter: infiniteOptions?.filter,
@@ -489,11 +490,10 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     return useQuery({
       queryKey,
       queryFn: async () => {
-        const { query, variables } = buildByIdQuery(
-          entity as string,
-          id!,
-          queryOptions as unknown as Record<string, unknown> | undefined,
-        );
+        const { query, variables } = buildByIdQuery(entity as string, id!, {
+          ...queryOptions,
+          select: withId(queryOptions.select),
+        } as unknown as Record<string, unknown>);
 
         const data = (await transport(query, variables, merged)) as Record<
           string,

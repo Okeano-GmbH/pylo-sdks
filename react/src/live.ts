@@ -101,10 +101,12 @@ export function applyPagesEvent(
     if (placement.keepOverflow) return { data: inserted, refetch: false };
     const { perPage } = placement;
     if (perPage === undefined) return { data: inserted, refetch: "later" };
-    return {
-      data: updatePage(inserted, 0, (page) => ({ ...page, data: page.data.slice(0, perPage) })),
-      refetch: false,
-    };
+    const page = inserted.pages[0]!;
+    if (page.data.length <= perPage) return { data: inserted, refetch: false };
+    // The last row moved to the next page, which the page counts must show.
+    const trimmed = recountPages({ ...page, data: page.data.slice(0, perPage) }, perPage);
+    if (!trimmed) return { data: inserted, refetch: "later" };
+    return { data: updatePage(inserted, 0, () => trimmed), refetch: false };
   }
 
   // A row entering the filter, a create under another sort, or a row on a
@@ -118,6 +120,26 @@ function updatePage(
   update: (page: ListData) => ListData,
 ): PagesData {
   return { ...data, pages: data.pages.map((page, i) => (i === index ? update(page) : page)) };
+}
+
+// Recomputes the first page's counts from its total, or null when they are
+// selected without the total they depend on.
+function recountPages(page: ListData, perPage: number): ListData | null {
+  const pagination = page.pagination;
+  if (!pagination) return page;
+  const total = pagination.total;
+  const dependsOnTotal = "last_page" in pagination || "has_more_pages" in pagination;
+  if (!dependsOnTotal) return page;
+  if (typeof total !== "number") return null;
+  const lastPage = Math.max(1, Math.ceil(total / perPage));
+  return {
+    ...page,
+    pagination: {
+      ...pagination,
+      ...("last_page" in pagination ? { last_page: lastPage } : {}),
+      ...("has_more_pages" in pagination ? { has_more_pages: lastPage > 1 } : {}),
+    },
+  };
 }
 
 // Every page carries the same total; only the first is adjusted, as the hooks

@@ -100,12 +100,20 @@ describe("usePyloList — live", () => {
     await waitFor(() => expect(result.current.data?.map((r) => (r as { id: string }).id)).toEqual(["b"]));
   });
 
-  it("leaves the selection alone without `live`", async () => {
-    const t = setup([{ id: "a", name: "Ada" }]);
-    renderHook(() => t.hooks.usePyloList("contact", { select: { name: true } }), { wrapper: t.wrapper });
-    await waitFor(() => expect(t.calls("contactList")).toBe(1));
+  it("can turn live on over rows cached without it", async () => {
+    const t = setup([{ id: "a", name: "Ada" }, { id: "b", name: "Bea" }]);
+    const { result, rerender } = renderHook(
+      ({ live }) => t.hooks.usePyloList("contact", { select: { name: true }, live }),
+      { wrapper: t.wrapper, initialProps: { live: false } },
+    );
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
     const [listQuery] = t.transport.mock.calls[0]!;
-    expect(listQuery.replace(/\s+/g, " ")).toContain("data { name }");
+    expect(listQuery.replace(/\s+/g, " ")).toContain("data { name id }");
+
+    rerender({ live: true });
+    t.emit({ kind: "delete", id: "a", removed: true });
+    await waitFor(() => expect(result.current.data?.map((r) => (r as { id: string }).id)).toEqual(["b"]));
+    expect(t.calls("contactList")).toBe(1);
   });
 
   it("refetches a create instead of prepending it to a later page", async () => {
