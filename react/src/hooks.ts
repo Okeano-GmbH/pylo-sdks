@@ -115,6 +115,24 @@ function patchableWith(headers: Record<string, string> | undefined): boolean {
   return headers === undefined || Object.keys(headers).length === 0;
 }
 
+// Events are matched to cached rows by id, so a live query always fetches it.
+function withLiveId<T>(select: T, live: boolean | undefined): T {
+  return live ? { ...select, id: true } : select;
+}
+
+// A row inserted live shifts the server's offsets, so the next page can
+// repeat the last row of the one before.
+function dedupeById(rows: unknown[]): unknown[] {
+  const seen = new Set<unknown>();
+  return rows.filter((row) => {
+    const id = (row as { id?: unknown } | null)?.id;
+    if (id === undefined) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 // More pages than this aren't refetched one by one after a reconnect; the
 // list starts again from its first page.
 const MAX_PAGES_TO_RESYNC = 5;
@@ -301,10 +319,10 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     const result = useQuery({
       queryKey,
       queryFn: async () => {
-        const { query, variables } = buildListQuery(
-          entity as string,
-          queryOptions as unknown as Record<string, unknown> | undefined,
-        );
+        const { query, variables } = buildListQuery(entity as string, {
+          ...queryOptions,
+          select: withLiveId(queryOptions.select, queryOptions.live),
+        } as unknown as Record<string, unknown>);
 
         const data = (await transport(query, variables, merged)) as Record<
           string,
@@ -322,7 +340,12 @@ export function createPyloHooks<S>(options?: HooksOptions) {
       queryKey,
       queryOptions.live ? { select: queryOptions.select, filter: queryOptions.filter } : null,
       (data, event) =>
-        patchable ? applyListEvent(data, event, queryOptions.filter?.sortby) : { data, refetch: "later" },
+        patchable
+          ? applyListEvent(data, event, queryOptions.filter?.sortby, {
+              firstPage: (queryOptions.pagination?.page ?? 1) === 1,
+              perPage: queryOptions.pagination?.per_page,
+            })
+          : { data, refetch: "later" },
     );
 
     return {
@@ -388,7 +411,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         const select = infiniteOptions.select as { _pagination?: object };
         const runtimeOptions = {
           select: {
-            ...select,
+            ...withLiveId(select, infiniteOptions.live),
             _pagination: { ...select._pagination, ...INFINITE_PAGINATION_SELECT },
           },
           filter: infiniteOptions?.filter,
@@ -416,8 +439,8 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return undefined;
       },
       select: (queryData: InfiniteData<PageData, number>) => {
-        const allData = queryData.pages.flatMap(
-          (page: PageData) => page.data,
+        const allData = dedupeById(
+          queryData.pages.flatMap((page: PageData) => page.data),
         ) as Array<EntityResult<S, E, Sel>>;
 
         return {

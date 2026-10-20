@@ -34,12 +34,24 @@ export function applyRowEvent(
   return { data: { ...row, ...(event.data as Row) }, refetch: false };
 }
 
+// Where the cached rows sit in the server's result.
+export interface Placement {
+  // Whether they start at the first page, where new rows go.
+  firstPage: boolean;
+  // The page size to trim to after an insert. Without it a single page can't
+  // tell whether it overflowed, so it refetches.
+  perPage?: number | undefined;
+  // Infinite lists keep the overflow; their flattening dedupes by id.
+  keepOverflow?: boolean;
+}
+
 export function applyListEvent(
   list: ListData,
   event: RealtimeEvent,
   sortby: SortInput[] | undefined,
+  placement: Placement,
 ): LiveResult<ListData> {
-  const result = applyPagesEvent({ pages: [list], pageParams: [1] }, event, sortby);
+  const result = applyPagesEvent({ pages: [list], pageParams: [1] }, event, sortby, placement);
   return { data: result.data.pages[0]!, refetch: result.refetch };
 }
 
@@ -47,6 +59,7 @@ export function applyPagesEvent(
   data: PagesData,
   event: RealtimeEvent,
   sortby: SortInput[] | undefined,
+  placement: Placement = { firstPage: true, keepOverflow: true },
 ): LiveResult<PagesData> {
   const pageIndex = data.pages.findIndex((page) => page.data.some((row) => row.id === event.id));
 
@@ -81,10 +94,15 @@ export function applyPagesEvent(
   }
 
   if (event.kind === "create" && isNewestFirst(sortby) && data.pages.length > 0) {
+    if (!placement.firstPage) return { data, refetch: "later" };
+    const inserted = updatePage(data, 0, (page) =>
+      adjustTotal({ ...page, data: [incoming, ...page.data] }, 0, 1),
+    );
+    if (placement.keepOverflow) return { data: inserted, refetch: false };
+    const { perPage } = placement;
+    if (perPage === undefined) return { data: inserted, refetch: "later" };
     return {
-      data: updatePage(data, 0, (page) =>
-        adjustTotal({ ...page, data: [incoming, ...page.data] }, 0, 1),
-      ),
+      data: updatePage(inserted, 0, (page) => ({ ...page, data: page.data.slice(0, perPage) })),
       refetch: false,
     };
   }

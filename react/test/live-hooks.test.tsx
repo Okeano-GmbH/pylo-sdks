@@ -60,6 +60,7 @@ function setup(rows: Array<Record<string, unknown>>, options?: { headers?: Recor
 
   return {
     hooks,
+    transport,
     wrapper,
     realtime,
     subscriptions,
@@ -82,6 +83,48 @@ describe("usePyloList — live", () => {
 
     expect(t.subscriptions).toHaveLength(1);
     expect(t.subscriptions[0]).toMatchObject({ entity: "contact", options: { select: { name: true }, filter } });
+  });
+
+  it("fetches ids it wasn't asked for, so removals find their row", async () => {
+    const t = setup([{ id: "a", name: "Ada" }, { id: "b", name: "Bea" }]);
+    const { result } = renderHook(
+      () => t.hooks.usePyloList("contact", { select: { name: true }, live: true }),
+      { wrapper: t.wrapper },
+    );
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+
+    const [listQuery] = t.transport.mock.calls.find(([q]) => q.includes("contactList"))!;
+    expect(listQuery.replace(/\s+/g, " ")).toContain("data { name id }");
+
+    t.emit({ kind: "delete", id: "a", removed: true });
+    await waitFor(() => expect(result.current.data?.map((r) => (r as { id: string }).id)).toEqual(["b"]));
+  });
+
+  it("leaves the selection alone without `live`", async () => {
+    const t = setup([{ id: "a", name: "Ada" }]);
+    renderHook(() => t.hooks.usePyloList("contact", { select: { name: true } }), { wrapper: t.wrapper });
+    await waitFor(() => expect(t.calls("contactList")).toBe(1));
+    const [listQuery] = t.transport.mock.calls[0]!;
+    expect(listQuery.replace(/\s+/g, " ")).toContain("data { name }");
+  });
+
+  it("refetches a create instead of prepending it to a later page", async () => {
+    const t = setup([{ id: "a", name: "Ada" }]);
+    const { result } = renderHook(
+      () =>
+        t.hooks.usePyloList("contact", {
+          select: { name: true },
+          pagination: { page: 2, per_page: 1 },
+          live: true,
+        }),
+      { wrapper: t.wrapper },
+    );
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+
+    t.emit({ kind: "create", id: "z", removed: false, data: { id: "z", name: "Zoe" } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(result.current.data).toEqual([{ id: "a", name: "Ada" }]);
+    await waitFor(() => expect(t.calls("contactList")).toBe(2), { timeout: 3_000 });
   });
 
   it("does not subscribe without `live`", () => {
@@ -212,6 +255,28 @@ describe("usePyloInfiniteList — live", () => {
 
     act(() => t.subscriptions[0]!.handlers.onResync!());
     await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+  });
+});
+
+describe("usePyloInfiniteList — flattening", () => {
+  it("drops a row repeated across pages after a live insert shifted them", async () => {
+    const t = setup([]);
+    const { result } = renderHook(
+      () => t.hooks.usePyloInfiniteList("contact", { select: { name: true }, live: true }),
+      { wrapper: t.wrapper },
+    );
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    const queryClient = (t.wrapper({ children: null }) as { props: { client: QueryClient } }).props.client;
+    const key = ["pylo", "contact", "infiniteList", { perPage: 20, filter: undefined, select: { name: true }, headers: undefined }];
+    const pages = [
+      { data: [{ id: "new" }, { id: "a" }, { id: "b" }], pagination: { current_page: 1, has_more_pages: true } },
+      { data: [{ id: "b" }, { id: "c" }], pagination: { current_page: 2, has_more_pages: false } },
+    ];
+    act(() => queryClient.setQueryData(key, { pages, pageParams: [1, 2] }));
+    await waitFor(() =>
+      expect(result.current.data?.data.map((r) => (r as { id: string }).id)).toEqual(["new", "a", "b", "c"]),
+    );
   });
 });
 

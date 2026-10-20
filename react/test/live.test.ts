@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { RealtimeEvent } from "@pylo/core";
 import { applyListEvent, applyPagesEvent, applyRowEvent } from "../src/live.js";
 
+const first = { firstPage: true, perPage: 10 };
+
 const update = (id: string, data: Record<string, unknown>): RealtimeEvent => ({
   kind: "update",
   id,
@@ -47,21 +49,21 @@ describe("applyRowEvent", () => {
 
 describe("applyListEvent", () => {
   it("merges an update in place when no sort field changed", () => {
-    const result = applyListEvent(list(), update("b", { name: "Bo" }), [{ field: "rank", order: "asc" }]);
+    const result = applyListEvent(list(), update("b", { name: "Bo" }), [{ field: "rank", order: "asc" }], first);
     expect(result.refetch).toBe(false);
     expect(result.data.data[1]).toEqual({ id: "b", name: "Bo", rank: 2 });
   });
 
   it("refetches soon instead of merging when a sort field changed", () => {
     const before = list();
-    const result = applyListEvent(before, update("a", { rank: 9 }), [{ field: "rank", order: "asc" }]);
+    const result = applyListEvent(before, update("a", { rank: 9 }), [{ field: "rank", order: "asc" }], first);
     expect(result).toEqual({ data: before, refetch: "soon" });
   });
 
   it("merges and refetches later when the sort field isn't in the projection", () => {
     const result = applyListEvent(list(), update("a", { name: "Ann" }), [
       { field: "missing", order: "asc" },
-    ]);
+    ], first);
     expect(result.refetch).toBe("later");
     expect(result.data.data[0]!["name"]).toBe("Ann");
   });
@@ -69,7 +71,7 @@ describe("applyListEvent", () => {
   it("ignores immutable sort fields", () => {
     const result = applyListEvent(list(), update("a", { name: "Ann" }), [
       { field: "created_at", order: "desc" },
-    ]);
+    ], first);
     expect(result.refetch).toBe(false);
   });
 
@@ -78,16 +80,16 @@ describe("applyListEvent", () => {
       data: [{ id: "a", company: { data: { name: "X" } } }],
     };
     const sortby = [{ field: "company.name", order: "asc" as const }];
-    expect(applyListEvent(rows, update("a", { company: { data: { name: "X" } } }), sortby).refetch).toBe(
+    expect(applyListEvent(rows, update("a", { company: { data: { name: "X" } } }), sortby, first).refetch).toBe(
       false,
     );
-    expect(applyListEvent(rows, update("a", { company: { data: { name: "Y" } } }), sortby).refetch).toBe(
+    expect(applyListEvent(rows, update("a", { company: { data: { name: "Y" } } }), sortby, first).refetch).toBe(
       "soon",
     );
   });
 
   it("removes a row and still rebalances pages in the background", () => {
-    const result = applyListEvent(list(), removed("a", "update"), undefined);
+    const result = applyListEvent(list(), removed("a", "update"), undefined, first);
     expect(result.data.data.map((r) => r.id)).toEqual(["b"]);
     expect(result.data.pagination).toEqual({ total: 1 });
     expect(result.refetch).toBe("later");
@@ -95,12 +97,12 @@ describe("applyListEvent", () => {
 
   it("ignores the removal of a row it doesn't hold", () => {
     const before = list();
-    expect(applyListEvent(before, removed("z"), undefined)).toEqual({ data: before, refetch: false });
+    expect(applyListEvent(before, removed("z"), undefined, first)).toEqual({ data: before, refetch: false });
   });
 
   it("prepends a create under newest-first sorting", () => {
     for (const sortby of [undefined, [{ field: "created_at", order: "desc" as const }]]) {
-      const result = applyListEvent(list(), create("c", { name: "Cy" }), sortby);
+      const result = applyListEvent(list(), create("c", { name: "Cy" }), sortby, first);
       expect(result.refetch).toBe(false);
       expect(result.data.data[0]).toEqual({ id: "c", name: "Cy" });
       expect(result.data.pagination).toEqual({ total: 3 });
@@ -109,20 +111,20 @@ describe("applyListEvent", () => {
 
   it("leaves a create under any other sort to the server", () => {
     const before = list();
-    const result = applyListEvent(before, create("c", {}), [{ field: "name", order: "asc" }]);
+    const result = applyListEvent(before, create("c", {}), [{ field: "name", order: "asc" }], first);
     expect(result).toEqual({ data: before, refetch: "later" });
   });
 
   it("leaves a row entering the filter to the server", () => {
     const before = list();
-    expect(applyListEvent(before, update("c", { name: "Cy" }), undefined)).toEqual({
+    expect(applyListEvent(before, update("c", { name: "Cy" }), undefined, first)).toEqual({
       data: before,
       refetch: "later",
     });
   });
 
   it("keeps lists without pagination intact", () => {
-    const result = applyListEvent({ data: [{ id: "a" }] }, create("c", {}), undefined);
+    const result = applyListEvent({ data: [{ id: "a" }] }, create("c", {}), undefined, first);
     expect(result.data).toEqual({ data: [{ id: "c" }, { id: "a" }] });
   });
 });
@@ -155,5 +157,28 @@ describe("applyPagesEvent", () => {
     expect(result.data.pages[0]!.data.map((r) => r.id)).toEqual(["z", "a", "b"]);
     expect(result.data.pages[0]!.pagination).toEqual({ total: 5, current_page: 1 });
     expect(result.data.pageParams).toEqual([1, 2]);
+  });
+});
+
+describe("applyListEvent — page placement", () => {
+  it("leaves a create to the server when the list isn't showing the first page", () => {
+    const before = list();
+    expect(applyListEvent(before, create("c", {}), undefined, { firstPage: false, perPage: 2 })).toEqual({
+      data: before,
+      refetch: "later",
+    });
+  });
+
+  it("trims the first page back to its size after an insert", () => {
+    const result = applyListEvent(list(), create("c", {}), undefined, { firstPage: true, perPage: 2 });
+    expect(result.data.data.map((r) => r.id)).toEqual(["c", "a"]);
+    expect(result.data.pagination).toEqual({ total: 3 });
+    expect(result.refetch).toBe(false);
+  });
+
+  it("refetches after an insert when the page size is unknown", () => {
+    const result = applyListEvent(list(), create("c", {}), undefined, { firstPage: true });
+    expect(result.data.data.map((r) => r.id)).toEqual(["c", "a", "b"]);
+    expect(result.refetch).toBe("later");
   });
 });
