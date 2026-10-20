@@ -1,4 +1,7 @@
-import { buildSubscriptionMutation } from "./mutation-builder.js";
+import {
+  buildDeleteSubscriptionMutation,
+  buildSubscriptionMutation,
+} from "./mutation-builder.js";
 import type { FilterInput } from "./shared-types.js";
 
 export type RealtimeEventKind = "create" | "update" | "delete";
@@ -248,8 +251,14 @@ class Realtime implements RealtimeClient {
   private dropGroup(group: Group): void {
     if (this.groups.get(group.key) !== group) return;
     this.groups.delete(group.key);
-    // There is no server-side unsubscribe yet: the subscription stays
-    // registered until the socket closes, and its events are dropped here.
+    const connectionId = this.connectionId;
+    void group.registration
+      .then(() => {
+        if (group.serverId === undefined) return;
+        const { query, variables } = buildDeleteSubscriptionMutation(group.serverId, connectionId);
+        return this.options.request(query, variables);
+      })
+      .catch(() => undefined);
     if (this.groups.size === 0) this.close();
   }
 

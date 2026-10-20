@@ -58,6 +58,7 @@ async function authenticate(ws: FakeWebSocket) {
 
 let request: ReturnType<typeof vi.fn>;
 let registrations: Array<Record<string, unknown>>;
+let deletions: Array<Record<string, unknown>>;
 let realtime: RealtimeClient;
 
 function setup(overrides: Partial<RealtimeOptions> = {}) {
@@ -76,7 +77,12 @@ beforeEach(() => {
   FakeWebSocket.instances = [];
   registrations = [];
   let next = 0;
+  deletions = [];
   request = vi.fn(async (query: string, variables: Record<string, unknown>) => {
+    if (query.includes("deleteSubscription(")) {
+      deletions.push(variables);
+      return { deleteSubscription: { data: { success: true } } };
+    }
     registrations.push(variables);
     const field = /\b(upsert\w+Subscription)\(/.exec(query)![1]!;
     const subscription = variables["subscription"] as { id?: string; connectionId: string };
@@ -237,12 +243,42 @@ describe("realtime subscriptions", () => {
     expect(sockets()[0]!.readyState).toBe(1);
   });
 
-  it("closes the socket once the last subscription has lingered out", async () => {
+  it("deletes the subscription and closes the socket once it has lingered out", async () => {
     const { sub } = await subscribed();
+    const connectionId = (registrations[0]!["subscription"] as { connectionId: string })
+      .connectionId;
     sub.unsubscribe();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(deletions).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(deletions).toEqual([{ id: "s1", connectionId }]);
     expect(realtime.getStatus()).toBe("closed");
     expect(sockets()[0]!.readyState).toBe(2);
+  });
+
+  it("deletes only the dropped subscription while others stay", async () => {
+    setup();
+    const contact = realtime.subscribe("contact", { select: { name: true } }, { onEvent: vi.fn() });
+    realtime.subscribe("order", { select: { total: true } }, { onEvent: vi.fn() });
+    await flush();
+    await authenticate(sockets()[0]!);
+
+    contact.unsubscribe();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(deletions).toHaveLength(1);
+    expect(deletions[0]).toMatchObject({ id: "s1" });
+    expect(realtime.isLive("order")).toBe(true);
+  });
+
+  it("waits for an in-flight registration before deleting it", async () => {
+    setup();
+    const sub = realtime.subscribe("contact", { select: { name: true } }, { onEvent: vi.fn() });
+    sub.unsubscribe();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(deletions).toEqual([
+      { id: "s1", connectionId: (registrations[0]!["subscription"] as { connectionId: string }).connectionId },
+    ]);
   });
 
   it("reports a failed registration and retries it on wake", async () => {

@@ -145,3 +145,17 @@ export function buildSubscriptionMutation(
     field,
   };
 }
+
+// Idempotent: an unknown id, or one on another connection, still succeeds.
+export function buildDeleteSubscriptionMutation(id: string, connectionId: string): BuildResult {
+  return {
+    query: `mutation DeleteSubscription($id: ID!, $connectionId: String!) {
+  deleteSubscription(id: $id, connectionId: $connectionId) {
+    data {
+      success
+    }
+  }
+}`,
+    variables: { id, connectionId },
+  };
+}

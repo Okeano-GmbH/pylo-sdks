@@ -92,6 +92,7 @@ export {
   buildDeleteMutation,
   buildIngestEventsMutation,
   buildSubscriptionMutation,
+  buildDeleteSubscriptionMutation,
 } from "./mutation-builder.js";
 
 // Realtime
