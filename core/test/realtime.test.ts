@@ -374,6 +374,31 @@ describe("realtime recovery", () => {
     expect(sockets()).toHaveLength(2);
   });
 
+  it("drops and retries a socket whose handshake stalls", async () => {
+    setup();
+    const onResync = vi.fn();
+    const sub = realtime.subscribe("contact", { select: { name: true } }, { onEvent: vi.fn(), onResync });
+    await flush();
+    const stalled = sockets()[0]!;
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await sub.ready;
+    expect(stalled.readyState).toBe(2);
+    expect(realtime.getStatus()).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets()).toHaveLength(2);
+    await authenticate(latest());
+    expect(realtime.isLive("contact")).toBe(true);
+  });
+
+  it("keeps a socket that authenticates before the handshake deadline", async () => {
+    await subscribed();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sockets()).toHaveLength(1);
+    expect(realtime.getStatus()).toBe("authenticated");
+  });
+
   it("probes an open socket on wake instead of reconnecting", async () => {
     await subscribed();
     realtime.wake();

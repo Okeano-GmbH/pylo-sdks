@@ -93,7 +93,9 @@ const MAX_RECONNECT_DELAY_MS = 30_000;
 // reporting OPEN, so liveness is an app-level ping.
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const PONG_TIMEOUT_MS = 10_000;
-const CONNECT_SETTLE_TIMEOUT_MS = 5_000;
+// A socket that hasn't authenticated by then is dropped and retried; a
+// handshake can stall without the socket ever closing.
+const HANDSHAKE_TIMEOUT_MS = 10_000;
 // Keeps a subscription briefly after its last listener leaves, so a remount
 // (React StrictMode, route changes) reuses it instead of registering anew.
 const LINGER_MS = 2_000;
@@ -339,16 +341,19 @@ class Realtime implements RealtimeClient {
     this.status = this.reconnectAttempts > 0 ? "reconnecting" : "connecting";
 
     return new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => settle(), CONNECT_SETTLE_TIMEOUT_MS);
+      const ws = new WebSocketImpl(url);
+      this.ws = ws;
+
+      const timeout = setTimeout(() => {
+        settle();
+        if (this.ws === ws && this.status !== "authenticated") this.dropSocket(ws);
+      }, HANDSHAKE_TIMEOUT_MS);
       const settle = () => {
         clearTimeout(timeout);
         if (this.settleConnect === settle) this.settleConnect = null;
         resolve();
       };
       this.settleConnect = settle;
-
-      const ws = new WebSocketImpl(url);
-      this.ws = ws;
 
       ws.onmessage = (event) => {
         if (this.ws !== ws) return;
