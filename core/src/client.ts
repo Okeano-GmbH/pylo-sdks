@@ -47,7 +47,12 @@ import type {
 } from "./upload.js";
 import { buildGenerateDocumentMutation } from "./documents.js";
 import { createRealtime } from "./realtime.js";
-import type { RealtimeClient, RealtimeHandlers, RealtimeSubscription } from "./realtime.js";
+import type {
+  RealtimeClient,
+  RealtimeHandlers,
+  RealtimeOptions,
+  RealtimeSubscription,
+} from "./realtime.js";
 import type {
   DocumentGenerateOptions,
   DocumentTemplateMap,
@@ -132,6 +137,8 @@ export interface ClientOptions {
   endpoint?: string;
   auth: AuthProvider;
   headers?: Record<string, string>;
+  // Node before 22 has no global WebSocket; pass one, e.g. from `ws`.
+  realtime?: Pick<RealtimeOptions, "WebSocket" | "windowEvents">;
 }
 
 // Aggregation over an entity. Split out from the rest of `EntityClient` because
@@ -925,6 +932,7 @@ export function createPyloClient<S, T = DocumentTemplateMap>(
   let realtime: RealtimeClient | undefined;
   const getRealtime = () =>
     (realtime ??= createRealtime({
+      ...options.realtime,
       request: (query, variables) =>
         executeGraphQL(endpoint, query, variables, auth, globalHeaders),
       auth,

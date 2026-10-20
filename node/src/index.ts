@@ -1,6 +1,7 @@
 import { createPyloClient, PyloError } from "@pylo/core";
 import type {
   AuthProvider,
+  ClientOptions,
   PyloClient,
   DocumentTemplateMap,
   DocumentTemplateName,
@@ -19,6 +20,8 @@ type NodeClientCredentials =
 type NodeClientOptions = NodeClientCredentials & {
   endpoint?: string;
   headers?: Record<string, string>;
+  // `subscribe` needs a WebSocket; Node before 22 has none built in.
+  realtime?: { WebSocket?: NonNullable<ClientOptions["realtime"]>["WebSocket"] };
 };
 
 // A JS caller can bypass the union, so the credential is checked at runtime too.
@@ -45,6 +48,9 @@ export function createPyloNode<S, T = RegisteredDocumentTemplates>(
     ...(options.endpoint !== undefined ? { endpoint: options.endpoint } : {}),
     auth: resolveAuth(options),
     ...(options.headers !== undefined ? { headers: options.headers } : {}),
+    ...(options.realtime?.WebSocket !== undefined
+      ? { realtime: { WebSocket: options.realtime.WebSocket } }
+      : {}),
   });
 }
 
@@ -135,6 +141,11 @@ export type PyloResult<
  * an action. Property access is forwarded to the current global client at
  * access time, so a worker reused across customers always sees the live one.
  */
+// An action finishes long before events arrive, and an open socket would keep
+// the worker busy.
+const FLOW_SUBSCRIBE_ERROR =
+  "Subscriptions are not available inside a flow action. Trigger the flow on the entity event instead.";
+
 export const pylo: PyloClient<RegisteredSchema, RegisteredDocumentTemplates> = new Proxy(
   {} as PyloClient<RegisteredSchema, RegisteredDocumentTemplates>,
   {
@@ -147,7 +158,17 @@ export const pylo: PyloClient<RegisteredSchema, RegisteredDocumentTemplates> = n
           "Pylo flow client unavailable (globalThis.__PYLO_FLOW_CLIENT__ is unset). `pylo` is only usable inside a Pylo flow action.",
         );
       }
-      return client[prop];
+      if (prop === "realtime") throw new PyloError(FLOW_SUBSCRIBE_ERROR);
+      const value = client[prop];
+      if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+        return value;
+      }
+      return new Proxy(value, {
+        get(target, key) {
+          if (key === "subscribe") throw new PyloError(FLOW_SUBSCRIBE_ERROR);
+          return (target as Record<string | symbol, unknown>)[key];
+        },
+      });
     },
   },
 );
@@ -194,6 +215,14 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  SubscribeOptions,
+  RealtimeClient,
+  RealtimeEvent,
+  RealtimeEventKind,
+  RealtimeHandlers,
+  RealtimeStatus,
+  RealtimeSubscription,
+  WebSocketConstructor,
   RequestOptions,
   MutationRequestOptions,
   AuthProvider,
