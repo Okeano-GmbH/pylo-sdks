@@ -182,3 +182,31 @@ describe("applyListEvent — page placement", () => {
     expect(result.refetch).toBe("later");
   });
 });
+
+describe("applyListEvent — page counts after a trim", () => {
+  const onePage = () => ({
+    data: [{ id: "a" }],
+    pagination: { total: 1, last_page: 1, has_more_pages: false, current_page: 1 },
+  });
+
+  it("moves the displaced row onto a next page the controls can reach", () => {
+    const result = applyListEvent(onePage(), create("c", {}), undefined, { firstPage: true, perPage: 1 });
+    expect(result.data).toEqual({
+      data: [{ id: "c" }],
+      pagination: { total: 2, last_page: 2, has_more_pages: true, current_page: 1 },
+    });
+    expect(result.refetch).toBe(false);
+  });
+
+  it("refetches when the counts are selected without the total", () => {
+    const list = { data: [{ id: "a" }], pagination: { has_more_pages: false } };
+    const result = applyListEvent(list, create("c", {}), undefined, { firstPage: true, perPage: 1 });
+    expect(result.refetch).toBe("later");
+  });
+
+  it("leaves the counts alone when the page still has room", () => {
+    const result = applyListEvent(onePage(), create("c", {}), undefined, { firstPage: true, perPage: 5 });
+    expect(result.data.pagination).toEqual({ total: 2, last_page: 1, has_more_pages: false, current_page: 1 });
+    expect(result.refetch).toBe(false);
+  });
+});
