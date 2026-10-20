@@ -84,3 +84,27 @@ export function createPyloApiRoute(options?: ApiRouteOptions) {
 
   return { POST };
 }
+
+/**
+ * Hands the session's access token to the browser for the realtime socket,
+ * which authenticates with it and keeps it to fetch every event under the
+ * user's permissions. Mount it under a path the Pylo proxy runs on — not
+ * `/api/auth/*`, which the matcher excludes, so the token would never be
+ * refreshed there. The refresh token stays in its httpOnly cookie.
+ *
+ * ```ts
+ * // app/api/pylo/ws-token/route.ts
+ * export const { GET } = createPyloWsTokenRoute();
+ * ```
+ */
+export function createPyloWsTokenRoute() {
+  async function GET(): Promise<Response> {
+    const token = await getAuthToken();
+    if (!token) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return Response.json({ token }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  return { GET };
+}
