@@ -8,8 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createPyloClient, resolveEndpoint } from "@pylo/core";
-import type { PyloClient } from "@pylo/core";
+import { createPyloClient, createRealtime, resolveEndpoint } from "@pylo/core";
+import type { PyloClient, RealtimeClient } from "@pylo/core";
 import { ME_QUERY } from "@pylo/auth";
 import type {
   AuthResult,
@@ -34,6 +34,14 @@ interface PyloContextValue {
   store: SessionStore | null;
   social: SocialLogin | null;
   getToken: () => Promise<string | null>;
+  realtime: LiveRealtime;
+}
+
+// The connection behind `live` hooks, plus how many live hooks keep each query
+// hash fresh, so writes can skip refetching those.
+export interface LiveRealtime {
+  client: RealtimeClient;
+  liveQueries: Map<string, number>;
 }
 
 const PyloContext = createContext<PyloContextValue | null>(null);
@@ -124,6 +132,23 @@ export function PyloProvider(props: PyloProviderProps) {
   getTokenRef.current = getTokenProp;
   const isEscapeHatch = getTokenProp !== undefined;
 
+  // Outside the memo below: that rebuilds on every token change, and the
+  // socket must survive refreshes. The connection opens on first subscribe.
+  const transportRef = useRef<Transport | null>(null);
+  const realtimeRef = useRef<LiveRealtime | null>(null);
+  realtimeRef.current ??= {
+    client: createRealtime({
+      request: (query, variables) => transportRef.current!(query, variables),
+      auth: async () => {
+        const token = isEscapeHatch ? await getTokenRef.current!() : await store!.getToken();
+        return { token };
+      },
+    }),
+    liveQueries: new Map(),
+  };
+  const realtime = realtimeRef.current;
+  useEffect(() => () => realtime.client.close(), [realtime]);
+
   const value = useMemo<PyloContextValue>(() => {
     const getToken = isEscapeHatch
       ? () => getTokenRef.current!()
@@ -135,14 +160,20 @@ export function PyloProvider(props: PyloProviderProps) {
       ...(store ? { onUnauthorized: () => store.refresh() } : {}),
     });
 
-    return { transport, endpoint, state, store, social, getToken };
-  }, [endpoint, state, store, social, isEscapeHatch]);
+    transportRef.current = transport;
+
+    return { transport, endpoint, state, store, social, getToken, realtime };
+  }, [endpoint, state, store, social, isEscapeHatch, realtime]);
 
   return <PyloContext.Provider value={value}>{props.children}</PyloContext.Provider>;
 }
 
 export function usePyloTransport(): Transport {
   return usePyloContext().transport;
+}
+
+export function usePyloRealtime(): LiveRealtime {
+  return usePyloContext().realtime;
 }
 
 export function usePyloClient<S>(): PyloClient<S> {

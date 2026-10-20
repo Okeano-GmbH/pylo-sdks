@@ -34,3 +34,22 @@ export function subscribeAppStateToFocus(
     focusManager.setFocused(undefined);
   };
 }
+
+interface WakeableLike {
+  wake(): void;
+}
+
+/**
+ * React Native has no focus or `online` event, so the realtime connection is
+ * checked when the app returns to the foreground: a socket that died in the
+ * background is replaced right away instead of after the next heartbeat.
+ */
+export function subscribeAppStateToRealtime(
+  appState: AppStateLike,
+  realtime: WakeableLike,
+): () => void {
+  const subscription = appState.addEventListener("change", (status) => {
+    if (status === "active") realtime.wake();
+  });
+  return () => subscription.remove();
+}

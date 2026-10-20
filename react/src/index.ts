@@ -49,6 +49,13 @@ export type {
   ListOptions,
   ByIdOptions,
   ListResult,
+  SubscribeOptions,
+  RealtimeClient,
+  RealtimeEvent,
+  RealtimeEventKind,
+  RealtimeHandlers,
+  RealtimeStatus,
+  RealtimeSubscription,
   RequestOptions,
   MutationRequestOptions,
   IngestEvents,
@@ -160,8 +167,8 @@ export const usePyloAuth = usePyloAuthUntyped as () => PyloAuth<
   RegisteredSocialReturnUrl
 >;
 
-export { PyloProvider, usePyloClient, usePyloTransport } from "./provider.js";
-export type { PyloProviderProps, PyloAuth } from "./provider.js";
+export { PyloProvider, usePyloClient, usePyloRealtime, usePyloTransport } from "./provider.js";
+export type { PyloProviderProps, PyloAuth, LiveRealtime } from "./provider.js";
 export type { OpenAuthSession, SocialLogin, SocialLoginResult } from "./session/social.js";
 export { createLocalStorageAdapter, createMemoryStorage } from "./session/storage.js";
 export type { PyloStorage } from "./session/storage.js";
@@ -178,6 +185,7 @@ export { createPyloHooks } from "./hooks.js";
 export type {
   ListHookResult,
   InfiniteListOptions,
+  LiveOption,
   UploadHookOptions,
   StartUploadOptions,
   UploadHookResult,

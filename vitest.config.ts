@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     // Runtime unit tests.
-    include: ["**/test/**/*.test.ts"],
+    include: ["**/test/**/*.test.{ts,tsx}"],
     // Type-level tests (`expectTypeOf` / `@ts-expect-error`), run through tsc.
     typecheck: {
       enabled: true,

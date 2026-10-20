@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { usePyloTransport } from "./provider.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePyloRealtime, usePyloTransport } from "./provider.js";
+import type { LiveRealtime } from "./provider.js";
+import { applyListEvent, applyPagesEvent, applyRowEvent } from "./live.js";
+import type { LiveResult } from "./live.js";
 import type { Transport } from "./transport.js";
 import {
   useQuery,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
+  hashKey,
+  type QueryClient,
   type UseQueryResult,
   type UseInfiniteQueryResult,
   type UseMutationResult,
@@ -81,12 +86,68 @@ import type {
   EventAggregateOptions,
   EventMetricInput,
   EventGroupByInput,
+  RealtimeEvent,
+  RealtimeHandlers,
+  SubscribeOptions,
 } from "@pylo/core";
 
 interface HooksOptions {
   /** Defaults to reading the transport `PyloProvider` supplies. */
   useTransport?: () => Transport;
+  /** Defaults to the connection `PyloProvider` supplies; `null` turns `live` off. */
+  useRealtime?: () => LiveRealtime | null;
   headers?: Record<string, string>;
+}
+
+export interface LiveOption {
+  /**
+   * Keep the result current over the realtime connection: updates and removals
+   * are patched into the cache, anything the cache can't place correctly
+   * triggers a background refetch.
+   */
+  live?: boolean;
+}
+
+// The server replays a subscription's selection without request headers, so
+// with headers (a variant header, say) events can't be trusted to match the
+// cached shape and only trigger refetches.
+function patchableWith(headers: Record<string, string> | undefined): boolean {
+  return headers === undefined || Object.keys(headers).length === 0;
+}
+
+// Events are matched to cached rows by id, so a live query always fetches it.
+function withLiveId<T>(select: T, live: boolean | undefined): T {
+  return live ? { ...select, id: true } : select;
+}
+
+// A row inserted live shifts the server's offsets, so the next page can
+// repeat the last row of the one before.
+function dedupeById(rows: unknown[]): unknown[] {
+  const seen = new Set<unknown>();
+  return rows.filter((row) => {
+    const id = (row as { id?: unknown } | null)?.id;
+    if (id === undefined) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+// More pages than this aren't refetched one by one after a reconnect; the
+// list starts again from its first page.
+const MAX_PAGES_TO_RESYNC = 5;
+
+function invalidateEntity(
+  queryClient: QueryClient,
+  realtime: LiveRealtime | null,
+  entity: string,
+): Promise<void> {
+  // Queries a live hook keeps current receive this write as an event.
+  const live = realtime !== null && realtime.client.isLive(entity);
+  return queryClient.invalidateQueries({
+    queryKey: ["pylo", entity],
+    ...(live ? { predicate: (query) => !realtime.liveQueries.has(query.queryHash) } : {}),
+  });
 }
 
 // `pagination` carries the fields `select._pagination` asked for, and is
@@ -106,7 +167,8 @@ export type InfiniteListOptions<S, E extends EntityNameWith<S, "list">, Sel exte
   perPage?: number;
   select: Sel;
   filter?: FilterInput;
-} & RequestOptions;
+} & RequestOptions &
+  LiveOption;
 
 type InfinitePagination<Sel> = Pick<
   PaginationData,
@@ -167,14 +229,78 @@ export interface UploadHookResult<S> {
 
 export function createPyloHooks<S>(options?: HooksOptions) {
   const useTransport = options?.useTransport ?? usePyloTransport;
+  const useRealtime = options?.useRealtime ?? usePyloRealtime;
   const globalHeaders = options?.headers;
+
+  // Subscribes with the query's own select and filter, so every event has the
+  // shape of the cached rows, and folds events into that one cache entry.
+  function useLive<T>(
+    entity: string,
+    queryKey: readonly unknown[],
+    subscription: { select: unknown; filter?: FilterInput | undefined } | null,
+    apply: (data: T, event: RealtimeEvent) => LiveResult<T>,
+    beforeResync?: () => void,
+  ): void {
+    const realtime = useRealtime();
+    const queryClient = useQueryClient();
+    const keyHash = hashKey(queryKey);
+    const latest = useRef({ queryKey, subscription, apply, beforeResync });
+    latest.current = { queryKey, subscription, apply, beforeResync };
+    const enabled = realtime !== null && subscription !== null;
+
+    useEffect(() => {
+      if (!enabled) return;
+      const { queryKey, subscription } = latest.current;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let fireAt = Infinity;
+      // Trailing, and an earlier deadline wins, so a burst refetches once.
+      const scheduleRefetch = (delayMs: number) => {
+        const at = Date.now() + delayMs;
+        if (timer !== undefined && fireAt <= at) return;
+        clearTimeout(timer);
+        fireAt = at;
+        timer = setTimeout(() => {
+          timer = undefined;
+          fireAt = Infinity;
+          void queryClient.invalidateQueries({ queryKey, exact: true });
+        }, delayMs);
+      };
+
+      const counts = realtime.liveQueries;
+      counts.set(keyHash, (counts.get(keyHash) ?? 0) + 1);
+      const sub = realtime.client.subscribe(entity, subscription!, {
+        onEvent: (event) => {
+          let refetch: LiveResult<T>["refetch"] = false;
+          queryClient.setQueryData<T>(queryKey, (old) => {
+            if (old === undefined) return old;
+            const result = latest.current.apply(old, event);
+            refetch = result.refetch;
+            return result.data;
+          });
+          if (refetch) scheduleRefetch(refetch === "soon" ? 250 : 1_500);
+        },
+        onResync: () => {
+          latest.current.beforeResync?.();
+          void queryClient.invalidateQueries({ queryKey, exact: true });
+        },
+      });
+
+      return () => {
+        clearTimeout(timer);
+        sub.unsubscribe();
+        const left = (counts.get(keyHash) ?? 1) - 1;
+        if (left > 0) counts.set(keyHash, left);
+        else counts.delete(keyHash);
+      };
+    }, [enabled, realtime, queryClient, entity, keyHash]);
+  }
 
   function usePyloList<
     E extends EntityNameWith<S, "list">,
     const Sel extends ListSelectConstraint<S, E, Sel>,
   >(
     entity: E,
-    queryOptions: ListOptions<S, E, Sel> & RequestOptions,
+    queryOptions: ListOptions<S, E, Sel> & RequestOptions & LiveOption,
   ): ListHookResult<EntityResult<S, E, Sel>, Sel> {
     const transport = useTransport();
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
@@ -193,10 +319,10 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     const result = useQuery({
       queryKey,
       queryFn: async () => {
-        const { query, variables } = buildListQuery(
-          entity as string,
-          queryOptions as unknown as Record<string, unknown> | undefined,
-        );
+        const { query, variables } = buildListQuery(entity as string, {
+          ...queryOptions,
+          select: withLiveId(queryOptions.select, queryOptions.live),
+        } as unknown as Record<string, unknown>);
 
         const data = (await transport(query, variables, merged)) as Record<
           string,
@@ -207,6 +333,20 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return data[listKey]!;
       },
     });
+
+    const patchable = patchableWith(merged);
+    useLive<Parameters<typeof applyListEvent>[0]>(
+      entity,
+      queryKey,
+      queryOptions.live ? { select: queryOptions.select, filter: queryOptions.filter } : null,
+      (data, event) =>
+        patchable
+          ? applyListEvent(data, event, queryOptions.filter?.sortby, {
+              firstPage: (queryOptions.pagination?.page ?? 1) === 1,
+              perPage: queryOptions.pagination?.per_page,
+            })
+          : { data, refetch: "later" },
+    );
 
     return {
       data: (result.data?.data ?? undefined) as EntityResult<S, E, Sel>[] | undefined,
@@ -231,26 +371,47 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     }>;
   }> {
     const transport = useTransport();
+    const queryClient = useQueryClient();
     const perPage = infiniteOptions?.perPage ?? 20;
     const merged = mergeHeaders(globalHeaders, infiniteOptions?.headers);
+    const queryKey = [
+      "pylo",
+      entity,
+      "infiniteList",
+      {
+        perPage,
+        filter: infiniteOptions?.filter,
+        select: infiniteOptions?.select,
+        headers: merged,
+      },
+    ];
+
+    const patchable = patchableWith(merged);
+    useLive<Parameters<typeof applyPagesEvent>[0]>(
+      entity,
+      queryKey,
+      infiniteOptions.live
+        ? { select: infiniteOptions.select, filter: infiniteOptions.filter }
+        : null,
+      (data, event) =>
+        patchable
+          ? applyPagesEvent(data, event, infiniteOptions.filter?.sortby)
+          : { data, refetch: "later" },
+      () =>
+        queryClient.setQueryData<InfiniteData<PageData, number>>(queryKey, (old) =>
+          old && old.pages.length > MAX_PAGES_TO_RESYNC
+            ? { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) }
+            : old,
+        ),
+    );
 
     return useInfiniteQuery({
-      queryKey: [
-        "pylo",
-        entity,
-        "infiniteList",
-        {
-          perPage,
-          filter: infiniteOptions?.filter,
-          select: infiniteOptions?.select,
-          headers: merged,
-        },
-      ],
+      queryKey,
       queryFn: async ({ pageParam }: { pageParam: number }) => {
         const select = infiniteOptions.select as { _pagination?: object };
         const runtimeOptions = {
           select: {
-            ...select,
+            ...withLiveId(select, infiniteOptions.live),
             _pagination: { ...select._pagination, ...INFINITE_PAGINATION_SELECT },
           },
           filter: infiniteOptions?.filter,
@@ -278,8 +439,8 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return undefined;
       },
       select: (queryData: InfiniteData<PageData, number>) => {
-        const allData = queryData.pages.flatMap(
-          (page: PageData) => page.data,
+        const allData = dedupeById(
+          queryData.pages.flatMap((page: PageData) => page.data),
         ) as Array<EntityResult<S, E, Sel>>;
 
         return {
@@ -306,12 +467,27 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   >(
     entity: E,
     id: string | null | undefined,
-    queryOptions: ByIdOptions<S, E, Sel> & RequestOptions,
+    queryOptions: ByIdOptions<S, E, Sel> & RequestOptions & LiveOption,
   ): UseQueryResult<EntityResult<S, E, Sel> | null> {
     const transport = useTransport();
     const merged = mergeHeaders(globalHeaders, queryOptions?.headers);
+    const queryKey = ["pylo", entity, "byId", id, { select: queryOptions?.select, headers: merged }];
+
+    const patchable = patchableWith(merged);
+    useLive<Parameters<typeof applyRowEvent>[0]>(
+      entity,
+      queryKey,
+      queryOptions.live && id
+        ? {
+            select: queryOptions.select,
+            filter: { query: [{ condition: { field: "id", operator: "equal", value: id } }] },
+          }
+        : null,
+      (data, event) => (patchable ? applyRowEvent(data, event) : { data, refetch: "later" }),
+    );
+
     return useQuery({
-      queryKey: ["pylo", entity, "byId", id, { select: queryOptions?.select, headers: merged }],
+      queryKey,
       queryFn: async () => {
         const { query, variables } = buildByIdQuery(
           entity as string,
@@ -466,6 +642,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   ): UseMutationResult<{ id: string }, Error, UpsertInput<S, E>> {
     const transport = useTransport();
     const queryClient = useQueryClient();
+    const realtime = useRealtime();
     const merged = mergeHeaders(
       mergeHeaders(globalHeaders, mutationOptions?.headers),
       flagsToHeaders(mutationOptions ?? {}),
@@ -491,11 +668,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return data[field]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
-        if (!isDryRun) {
-          void queryClient.invalidateQueries({
-            queryKey: ["pylo", entity],
-          });
-        }
+        if (!isDryRun) void invalidateEntity(queryClient, realtime, entity);
         mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
       },
     });
@@ -513,6 +686,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   ): UseMutationResult<{ id: string }[], Error, UpsertInput<S, E>[]> {
     const transport = useTransport();
     const queryClient = useQueryClient();
+    const realtime = useRealtime();
     const merged = mergeHeaders(
       mergeHeaders(globalHeaders, mutationOptions?.headers),
       flagsToHeaders(mutationOptions ?? {}),
@@ -538,11 +712,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return data[field]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
-        if (!isDryRun) {
-          void queryClient.invalidateQueries({
-            queryKey: ["pylo", entity],
-          });
-        }
+        if (!isDryRun) void invalidateEntity(queryClient, realtime, entity);
         mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
       },
     });
@@ -557,6 +727,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
   ): UseMutationResult<{ success: boolean }, Error, string[]> {
     const transport = useTransport();
     const queryClient = useQueryClient();
+    const realtime = useRealtime();
     const merged = mergeHeaders(
       mergeHeaders(globalHeaders, mutationOptions?.headers),
       flagsToHeaders(mutationOptions ?? {}),
@@ -583,11 +754,7 @@ export function createPyloHooks<S>(options?: HooksOptions) {
         return data[mutationKey]!.data;
       },
       onSuccess: (data, variables, onMutateResult, context) => {
-        if (!isDryRun) {
-          void queryClient.invalidateQueries({
-            queryKey: ["pylo", entity],
-          });
-        }
+        if (!isDryRun) void invalidateEntity(queryClient, realtime, entity);
         mutationOptions?.onSuccess?.(data, variables, onMutateResult, context);
       },
     });
@@ -888,6 +1055,43 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     });
   }
 
+  // Calls `onEvent` for each change to matching rows, without touching the
+  // cache. The handler may change between renders without resubscribing.
+  function usePyloSubscription<
+    E extends EntityNameWith<S, "list">,
+    const Sel extends SelectConstraint<S, E, Sel>,
+  >(
+    entity: E,
+    subscribeOptions: SubscribeOptions<S, E, Sel> & { enabled?: boolean },
+    onEvent: RealtimeHandlers<EntityResult<S, E, Sel>>["onEvent"],
+    handlers?: Omit<RealtimeHandlers<EntityResult<S, E, Sel>>, "onEvent">,
+  ): void {
+    const realtime = useRealtime();
+    const latest = useRef({ subscribeOptions, onEvent, handlers });
+    latest.current = { subscribeOptions, onEvent, handlers };
+    const enabled = realtime !== null && subscribeOptions.enabled !== false;
+    const key = hashKey([
+      subscribeOptions.select,
+      subscribeOptions.filter,
+      subscribeOptions.on,
+    ]);
+
+    useEffect(() => {
+      if (!enabled) return;
+      const { select, filter, on } = latest.current.subscribeOptions;
+      const sub = realtime.client.subscribe<EntityResult<S, E, Sel>>(
+        entity,
+        { select, filter, on },
+        {
+          onEvent: (event) => latest.current.onEvent(event),
+          onResync: () => latest.current.handlers?.onResync?.(),
+          onError: (error) => latest.current.handlers?.onError?.(error),
+        },
+      );
+      return () => sub.unsubscribe();
+    }, [enabled, realtime, entity, key]);
+  }
+
   return {
     usePyloList,
     usePyloInfiniteList,
@@ -904,5 +1108,6 @@ export function createPyloHooks<S>(options?: HooksOptions) {
     usePyloEventFieldValues,
     usePyloUpload,
     usePyloFileUrl,
+    usePyloSubscription,
   };
 }

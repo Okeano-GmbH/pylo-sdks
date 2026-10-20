@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { AppState } from "react-native";
 import { focusManager } from "@tanstack/react-query";
-import { PyloProvider as BaseProvider } from "@pylo/react";
+import { PyloProvider as BaseProvider, usePyloRealtime } from "@pylo/react";
 import type { PyloProviderProps as BaseProps } from "@pylo/react";
 import { createSecureStorage } from "./storage.js";
-import { subscribeAppStateToFocus } from "./app-state.js";
+import { subscribeAppStateToFocus, subscribeAppStateToRealtime } from "./app-state.js";
 import { openAuthSession, expoHandoffCrypto } from "./auth-session.js";
 
 export interface PyloProviderProps extends BaseProps {
@@ -35,6 +35,15 @@ export function PyloProvider({ refetchOnAppFocus = true, ...props }: PyloProvide
       storage={storage}
       openAuthSession={props.openAuthSession ?? openAuthSession}
       handoffCrypto={props.handoffCrypto ?? expoHandoffCrypto}
-    />
+    >
+      <WakeRealtimeOnForeground />
+      {props.children}
+    </BaseProvider>
   );
+}
+
+function WakeRealtimeOnForeground() {
+  const realtime = usePyloRealtime();
+  useEffect(() => subscribeAppStateToRealtime(AppState, realtime.client), [realtime]);
+  return null;
 }

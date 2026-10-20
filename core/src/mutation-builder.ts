@@ -1,4 +1,5 @@
-import type { PyloEventInput } from "./shared-types.js";
+import type { FilterInput, PyloEventInput } from "./shared-types.js";
+import { buildSelectionSet, capitalize, requireSelect } from "./query-builder.js";
 
 interface BuildResult {
   query: string;
@@ -90,5 +91,71 @@ export function buildIngestEventsMutation(events: PyloEventInput[]): BuildResult
   return {
     query: mutation,
     variables: { input: events },
+  };
+}
+
+export interface SubscriptionMutationInput {
+  select: unknown;
+  filter?: FilterInput | undefined;
+  // Set to update an existing subscription in place.
+  id?: string | undefined;
+  connectionId: string;
+  onCreate: boolean;
+  onUpdate: boolean;
+  onDelete: boolean;
+}
+
+// Registers a subscription with the websocket-service. The server keeps the
+// `fields { … }` selection as text and replays it per event, so it is the
+// projection every event carries; `id` is always added so events can be
+// matched to rows.
+export function buildSubscriptionMutation(
+  entityKey: string,
+  input: SubscriptionMutationInput,
+): UpsertBuildResult {
+  const select = requireSelect(entityKey, "subscribe", input.select);
+  const selection = buildSelectionSet({ ...select, id: true }, {}, new Map(), "", true);
+  const field = `upsert${capitalize(entityKey)}Subscription`;
+
+  const mutation = `mutation ${capitalize(field)}($subscription: SubscriptionInput, $filter: FilterInput) {
+  ${field}(subscription: $subscription, filter: $filter) {
+    subscription {
+      webserviceUrl
+      connectionId
+      id
+    }
+    fields {
+      ${selection}
+    }
+  }
+}`;
+
+  return {
+    query: mutation,
+    variables: {
+      subscription: {
+        ...(input.id !== undefined ? { id: input.id } : {}),
+        connectionId: input.connectionId,
+        onCreate: input.onCreate,
+        onUpdate: input.onUpdate,
+        onDelete: input.onDelete,
+      },
+      ...(input.filter !== undefined ? { filter: input.filter } : {}),
+    },
+    field,
+  };
+}
+
+// Idempotent: an unknown id, or one on another connection, still succeeds.
+export function buildDeleteSubscriptionMutation(id: string, connectionId: string): BuildResult {
+  return {
+    query: `mutation DeleteSubscription($id: ID!, $connectionId: String!) {
+  deleteSubscription(id: $id, connectionId: $connectionId) {
+    data {
+      success
+    }
+  }
+}`,
+    variables: { id, connectionId },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { subscribeAppStateToFocus } from "../src/app-state.js";
+import { subscribeAppStateToFocus, subscribeAppStateToRealtime } from "../src/app-state.js";
 
 function fakes() {
   let listener: ((status: string) => void) | undefined;
@@ -67,5 +67,25 @@ describe("subscribeAppStateToFocus", () => {
     f.emit("active");
 
     expect(f.setFocused).not.toHaveBeenCalled();
+  });
+});
+
+describe("subscribeAppStateToRealtime", () => {
+  it("checks the connection only when the app becomes active", () => {
+    const f = fakes();
+    const wake = vi.fn();
+    const unsubscribe = subscribeAppStateToRealtime(f.appState, { wake });
+
+    f.emit("background");
+    f.emit("inactive");
+    expect(wake).not.toHaveBeenCalled();
+
+    f.emit("active");
+    expect(wake).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    f.emit("active");
+    expect(wake).toHaveBeenCalledTimes(1);
+    expect(f.remove).toHaveBeenCalled();
   });
 });

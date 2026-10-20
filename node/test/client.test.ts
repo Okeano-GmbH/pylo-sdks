@@ -211,6 +211,53 @@ describe("pylo — injected flow client", () => {
   });
 });
 
+describe("pylo — subscriptions in a flow action", () => {
+  it("refuses entity subscriptions with a directed error", () => {
+    globals[FLOW_CLIENT_KEY] = createPyloNode<TestSchema>({ apiKey: "flow-key" });
+    const client = pylo as ReturnType<typeof createPyloNode<TestSchema>>;
+
+    expect(() => client.contact.subscribe).toThrow(/not available inside a flow action/);
+    expect(() => client.realtime).toThrow(/not available inside a flow action/);
+    expect(typeof client.contact.list).toBe("function");
+  });
+});
+
+describe("createPyloNode — realtime", () => {
+  it("opens subscriptions on the WebSocket it is given", async () => {
+    const opened: string[] = [];
+    class FakeWebSocket {
+      readyState = 0;
+      onopen = null;
+      onmessage = null;
+      onclose = null;
+      onerror = null;
+      constructor(url: string) {
+        opened.push(url);
+      }
+      send() {}
+      close() {}
+    }
+    graphqlRequest.mockResolvedValue({
+      data: {
+        upsertContactSubscription: {
+          subscription: { id: "s1", connectionId: "c1", webserviceUrl: "ws://test/c1" },
+        },
+      },
+    });
+
+    const client = createPyloNode<TestSchema>({
+      apiKey: "k",
+      realtime: { WebSocket: FakeWebSocket },
+    });
+    const sub = client.contact.subscribe({ select: { name: true } }, { onEvent: () => {} });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(opened).toEqual(["ws://test/c1"]);
+    sub.unsubscribe();
+    client.realtime.close();
+  });
+});
+
 describe("createPyloNode — bearer token", () => {
   it("authenticates with a bearer token, not an api key", async () => {
     const client = createPyloNode<TestSchema>({ token: "access-token" });
