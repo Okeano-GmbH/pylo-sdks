@@ -42,6 +42,12 @@ describe("applyRowEvent", () => {
     expect(applyRowEvent({ id: "a" }, removed("a"))).toEqual({ data: null, refetch: false });
   });
 
+  it("ignores events for other rows", () => {
+    const row = { id: "a", name: "Ada" };
+    expect(applyRowEvent(row, removed("b", "update"))).toEqual({ data: row, refetch: false });
+    expect(applyRowEvent(row, update("b", { name: "Bea" }))).toEqual({ data: row, refetch: false });
+  });
+
   it("fills a row that did not exist yet", () => {
     expect(applyRowEvent(null, create("a", { name: "Ada" })).data).toEqual({ id: "a", name: "Ada" });
   });

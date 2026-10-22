@@ -30,6 +30,8 @@ export function applyRowEvent(
   row: Row | null | undefined,
   event: RealtimeEvent,
 ): LiveResult<Row | null | undefined> {
+  // The server sends a removal for every row that isn't in the result, not only for ones that left it.
+  if (row && event.id !== row.id) return { data: row, refetch: false };
   if (event.removed) return { data: null, refetch: false };
   return { data: { ...row, ...(event.data as Row) }, refetch: false };
 }
