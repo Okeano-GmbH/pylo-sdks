@@ -1,5 +1,11 @@
 # @pylo/react
 
+## 0.11.1
+
+### Patch Changes
+
+- fe94efc: Live `usePyloById` no longer clears its row when another record of the same entity changes. The server reports such records as removed from the subscription, and the hook applied that to its own row.
+
 ## 0.11.0
 
 ### Minor Changes
