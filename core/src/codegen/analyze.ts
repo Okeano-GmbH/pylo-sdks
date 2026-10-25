@@ -1,6 +1,7 @@
 import type { RawEntity, RawEntityField, RawEntityRelation } from "./fetch-schema.js";
 
 export interface AnalyzedField {
+  id?: string;
   name: string;
   tsType: string;
   // Pylo's own type (`RICHTEXT`, `DATETIME`, …), which `tsType` flattens to `string`.
@@ -36,6 +37,8 @@ export const ENTITY_CAPABILITY_NAMES = [
 ] as const satisfies ReadonlyArray<keyof EntityCapabilities>;
 
 export interface AnalyzedRelation {
+  // Both sides of a relation carry the id of the one relation row.
+  id?: string;
   fieldName: string;
   type: "hasOne" | "hasMany";
   targetEntityKey: string;
@@ -44,6 +47,7 @@ export interface AnalyzedRelation {
 }
 
 export interface AnalyzedEntity {
+  id?: string;
   key: string;
   pascalName: string;
   shortcode: string;
@@ -149,6 +153,9 @@ function toPascalCase(snake: string): string {
     .join("");
 }
 
+const idOf = (raw: { id?: string }) =>
+  raw.id !== undefined ? { id: raw.id } : {};
+
 function analyzeField(
   field: RawEntityField,
   entityPascalName: string,
@@ -164,6 +171,7 @@ function analyzeField(
     const typeName = `${entityPascalName}${toPascalCase(field.name)}`;
     const values = enumValues.map((v) => v.value);
     return {
+      ...idOf(field),
       name: field.name,
       tsType: typeName,
       dataType: field.data_type,
@@ -175,6 +183,7 @@ function analyzeField(
   }
 
   return {
+    ...idOf(field),
     name: field.name,
     tsType: mapDataType(field.data_type),
     dataType: field.data_type,
@@ -195,6 +204,7 @@ function analyzeRelation(
   const relType = classifyRelation(relation.type);
 
   return {
+    ...idOf(relation),
     fieldName: relation.field_name,
     type: relType,
     targetEntityKey: toEntityKey(targetName),
@@ -218,6 +228,7 @@ function analyzeReverseRelation(
   const relType = classifyReverseRelation(relation.type);
 
   return {
+    ...idOf(relation),
     fieldName: relation.target_field_name,
     type: relType,
     targetEntityKey: toEntityKey(sourceName),
@@ -301,6 +312,7 @@ export function analyzeEntities(rawEntities: RawEntity[]): AnalyzedEntity[] {
     const deduped = reverseRelations.filter((r) => !seen.has(r.fieldName));
 
     return {
+      ...idOf(entity),
       key: toEntityKey(entity.name),
       pascalName: entity.name,
       shortcode: entity.shortcode,

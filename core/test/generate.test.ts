@@ -923,3 +923,31 @@ describe("PyloRegister augmentation", () => {
     expect(generateIndexFile([], "@pylo/core")).not.toContain("declare module");
   });
 });
+
+describe("analyzeEntities — ids", () => {
+  const withIds = {
+    ...contact,
+    id: "e1",
+    entity_fields: { data: [{ ...field("title"), id: "f1" }] },
+    entity_relations: {
+      data: [{ id: "r1", type: "ManyToOne", field_name: "company", target_field_name: "contacts", target_entity: { data: { name: "Company" } } }],
+    },
+    entity_related: {
+      data: [{ id: "r2", type: "ManyToOne", field_name: "owner", target_field_name: "owned", entity: { data: { name: "Deal" } } }],
+    },
+  } as unknown as RawEntity;
+
+  it("passes entity, field and relation ids through", () => {
+    const [entity] = analyzeEntities([withIds]);
+    expect(entity!.id).toBe("e1");
+    expect(entity!.fields[0]!.id).toBe("f1");
+    expect(entity!.relations.find((r) => r.fieldName === "company")!.id).toBe("r1");
+    expect(entity!.relations.find((r) => r.fieldName === "owned")!.id).toBe("r2");
+  });
+
+  it("leaves the id key out when the schema carries none", () => {
+    const [entity] = analyzeEntities([contact]);
+    expect(entity).not.toHaveProperty("id");
+    expect(entity!.fields[0]).not.toHaveProperty("id");
+  });
+});
