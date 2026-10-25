@@ -3,4 +3,4 @@
 "@pylo/node": minor
 ---
 
-`AnalyzedEntity`, `AnalyzedField` and `AnalyzedRelation` carry the record `id` from the schema fetch. Both sides of a relation carry the id of the same relation row.
+`AnalyzedEntity`, `AnalyzedField` and `AnalyzedRelation` carry the record `id` from the schema fetch. A relation carries its id only on the entity that defines it, the side `entity_relations_remove` works on.

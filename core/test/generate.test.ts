@@ -937,12 +937,13 @@ describe("analyzeEntities — ids", () => {
     },
   } as unknown as RawEntity;
 
-  it("passes entity, field and relation ids through", () => {
+  it("passes entity, field and owned relation ids through", () => {
     const [entity] = analyzeEntities([withIds]);
     expect(entity!.id).toBe("e1");
     expect(entity!.fields[0]!.id).toBe("f1");
     expect(entity!.relations.find((r) => r.fieldName === "company")!.id).toBe("r1");
-    expect(entity!.relations.find((r) => r.fieldName === "owned")!.id).toBe("r2");
+    // A relation is removed on the entity that defines it, so its other side gets no id to try.
+    expect(entity!.relations.find((r) => r.fieldName === "owned")).not.toHaveProperty("id");
   });
 
   it("leaves the id key out when the schema carries none", () => {

@@ -37,7 +37,7 @@ export const ENTITY_CAPABILITY_NAMES = [
 ] as const satisfies ReadonlyArray<keyof EntityCapabilities>;
 
 export interface AnalyzedRelation {
-  // Both sides of a relation carry the id of the one relation row.
+  // Only on the side that defines the relation, the one entity that can remove it.
   id?: string;
   fieldName: string;
   type: "hasOne" | "hasMany";
@@ -228,7 +228,6 @@ function analyzeReverseRelation(
   const relType = classifyReverseRelation(relation.type);
 
   return {
-    ...idOf(relation),
     fieldName: relation.target_field_name,
     type: relType,
     targetEntityKey: toEntityKey(sourceName),
