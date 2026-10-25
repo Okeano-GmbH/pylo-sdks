@@ -1,5 +1,16 @@
 # @pylo/node
 
+## 0.11.0
+
+### Minor Changes
+
+- 0355e4a: `AnalyzedEntity`, `AnalyzedField` and `AnalyzedRelation` carry the record `id` from the schema fetch. A relation carries its id only on the entity that defines it, the side `entity_relations_remove` works on.
+
+### Patch Changes
+
+- Updated dependencies [0355e4a]
+  - @pylo/core@0.13.0
+
 ## 0.10.0
 
 ### Minor Changes
