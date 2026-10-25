@@ -6,6 +6,7 @@ export const ENTITY_LIST_QUERY = `
 query PyloSchemaFetch($pagination: PaginationInput) {
   entityList(pagination: $pagination) {
     data {
+      id
       name
       shortcode
       is_system_entity
@@ -18,6 +19,7 @@ query PyloSchemaFetch($pagination: PaginationInput) {
       can_delete
       entity_fields {
         data {
+          id
           name
           data_type
           is_readable
@@ -39,6 +41,7 @@ query PyloSchemaFetch($pagination: PaginationInput) {
       }
       entity_relations {
         data {
+          id
           type
           field_name
           target_field_name
@@ -55,6 +58,7 @@ query PyloSchemaFetch($pagination: PaginationInput) {
       }
       entity_related {
         data {
+          id
           type
           field_name
           target_field_name
@@ -80,6 +84,8 @@ query PyloSchemaFetch($pagination: PaginationInput) {
 `;
 
 export interface RawEntityField {
+  // Optional so schema snapshots taken before the fetch selected it stay valid.
+  id?: string;
   name: string;
   data_type: string;
   // The backend's own gates for whether a field lands on the output type and on
@@ -99,6 +105,7 @@ export interface RawEntityField {
 }
 
 export interface RawEntityRelation {
+  id?: string;
   type: string;
   field_name: string;
   target_field_name: string | null;
@@ -115,6 +122,7 @@ export interface RawEntityRelation {
 }
 
 export interface RawEntity {
+  id?: string;
   name: string;
   shortcode: string;
   is_system_entity: boolean;
