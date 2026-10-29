@@ -1,5 +1,12 @@
 # @pylo/core
 
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [099bcd0]
+  - @pylo/auth@0.2.1
+
 ## 0.13.0
 
 ### Minor Changes
