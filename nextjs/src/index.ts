@@ -94,6 +94,7 @@ export type {
 } from "@pylo/core";
 
 export { PyloError } from "@pylo/core";
+export { isPyloUnauthorized } from "./errors.js";
 
 /**
  * Augmentable registry that pins the schema type for the `PyloSelect` /

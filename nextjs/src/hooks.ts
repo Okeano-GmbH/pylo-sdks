@@ -1,8 +1,11 @@
 "use client";
 
-import { createRealtime } from "@pylo/core";
+import { createRealtime, PyloError } from "@pylo/core";
+import type { GraphQLError } from "@pylo/auth";
 import { createPyloHooks as createSharedHooks } from "@pylo/react";
 import type { LiveRealtime, Transport } from "@pylo/react";
+
+export type { Transport } from "@pylo/react";
 
 interface HooksOptions {
   apiPath?: string;
@@ -11,9 +14,14 @@ interface HooksOptions {
   headers?: Record<string, string>;
 }
 
-// The browser never holds the token, so the socket fetches it from the app's
-// token route on every (re)authentication.
-async function fetchWsToken(path: string): Promise<{ token?: string }> {
+/**
+ * Fetches the access token for the realtime socket from the route
+ * `createPyloWsTokenRoute` is mounted on. Pass it as `auth` to `createRealtime`;
+ * the browser never holds the token otherwise.
+ */
+export async function fetchWsToken(
+  path = "/api/pylo/ws-token",
+): Promise<{ token?: string }> {
   const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) return {};
   const body = (await response.json()) as { token?: string };
@@ -22,10 +30,10 @@ async function fetchWsToken(path: string): Promise<{ token?: string }> {
 
 /**
  * Posts to the app's own route handler rather than the API, so the token stays
- * in an httpOnly cookie and never reaches client JavaScript. Errors keep the
- * shape this package has always thrown.
+ * in an httpOnly cookie and never reaches client JavaScript. Failures throw a
+ * `PyloError` carrying `httpStatus` and `code`; see `isPyloUnauthorized`.
  */
-function createApiRouteTransport(apiPath: string): Transport {
+export function createApiRouteTransport(apiPath = "/api/graphql"): Transport {
   return async (query, variables, headers) => {
     const response = await fetch(apiPath, {
       method: "POST",
@@ -38,18 +46,27 @@ function createApiRouteTransport(apiPath: string): Transport {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `GraphQL request failed: ${response.status} ${response.statusText}`,
+      const message = `GraphQL request failed: ${response.status} ${response.statusText}`;
+      const body = (await response.json().catch(() => null)) as {
+        errors?: GraphQLError[];
+      } | null;
+      const errors = body?.errors?.length ? body.errors : [{ message }];
+      throw new PyloError(
+        message,
+        errors.map((e) => ({
+          ...e,
+          extensions: { ...e.extensions, httpStatus: response.status },
+        })),
       );
     }
 
     const json = (await response.json()) as {
       data?: unknown;
-      errors?: Array<{ message: string }>;
+      errors?: GraphQLError[];
     };
 
     if (json.errors?.length) {
-      throw new Error(json.errors.map((e) => e.message).join(", "));
+      throw new PyloError(json.errors.map((e) => e.message).join(", "), json.errors);
     }
 
     return json.data;
