@@ -109,7 +109,7 @@ export type PyloErrorCode =
  */
 export interface GraphQLError {
   message: string;
-  /** `httpStatus` is present only on errors the SDK synthesized from the response status. */
+  /** `httpStatus` is set by the SDK on errors from a non-2xx response. */
   extensions?: { code?: PyloErrorCode | string; httpStatus?: number };
 }
 

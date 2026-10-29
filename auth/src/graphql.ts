@@ -48,8 +48,8 @@ export function extractErrorCode(
 }
 
 /**
- * The HTTP status behind an error, for the responses `graphqlRequest`
- * synthesized itself. Absent on errors the API returned in its own envelope.
+ * The HTTP status behind an error, set by `graphqlRequest` on every non-2xx
+ * response. Absent on errors that came back with a 2xx.
  */
 export function extractHttpStatus(
   errors: GraphQLError[] | CustomGraphQLError | undefined
@@ -87,8 +87,9 @@ export function isUnauthorizedError(response: GraphQLResponse<unknown>): boolean
     "authenticationexception",
   ];
 
-  // A synthesized error carries no message to match on. Only 401 counts: a 403
-  // from a proxy in front of the API must not end the caller's session.
+  // The API's own code on a 401 is not reliable (a refresh token it cannot
+  // decode comes back as INTERNAL_SERVER_ERROR), so the status decides. Only
+  // 401 counts: a 403 from a proxy in front of the API must not end a session.
   if (extractHttpStatus(errors) === 401) return true;
 
   if (Array.isArray(errors)) {
@@ -199,13 +200,22 @@ export async function graphqlRequest<T>(
     );
   }
 
-  // A non-2xx with a well-formed envelope is the API reporting an error it
-  // classified itself (401 UNAUTHENTICATED, for one) — leave it as it is.
   if (!response.ok && !hasErrors(parsed)) {
     return synthesizeError(
       `Pylo request failed (HTTP ${response.status})${body === "" ? "" : `: ${truncate(body)}`}`,
       response.status,
     );
+  }
+
+  if (!response.ok && Array.isArray(parsed.errors)) {
+    const httpStatus = response.status;
+    return {
+      ...parsed,
+      errors: parsed.errors.map((e) => ({
+        ...e,
+        extensions: { ...e.extensions, httpStatus },
+      })),
+    };
   }
 
   return parsed;
