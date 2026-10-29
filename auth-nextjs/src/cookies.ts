@@ -3,9 +3,23 @@ import { NextResponse } from "next/server.js";
 import type { CookieOptions } from "@pylo/auth";
 
 // Header set by middleware when auth refresh fails
-const AUTH_FAILED_HEADER = "x-pylo-auth-failed";
+export const AUTH_FAILED_HEADER = "x-pylo-auth-failed";
 // Header set by middleware with refreshed auth token
-const AUTH_TOKEN_HEADER = "x-pylo-auth-token";
+export const AUTH_TOKEN_HEADER = "x-pylo-auth-token";
+// Header set by middleware when a refresh failed transiently
+export const AUTH_REFRESH_FAILED_HEADER = "x-pylo-auth-refresh-failed";
+
+/**
+ * Copies the request headers without the ones only the middleware may set, so
+ * a client cannot hand route handlers a token or flag of its own.
+ */
+export function stripInternalHeaders(source: Headers): Headers {
+  const headers = new Headers(source);
+  headers.delete(AUTH_FAILED_HEADER);
+  headers.delete(AUTH_TOKEN_HEADER);
+  headers.delete(AUTH_REFRESH_FAILED_HEADER);
+  return headers;
+}
 
 const DEFAULT_COOKIE_OPTIONS: Required<CookieOptions> = {
   secure: process.env.NODE_ENV === "production",
@@ -67,6 +81,9 @@ export function getCookieOptions(options?: CookieOptions): Required<CookieOption
  * 1. Check if middleware flagged auth as failed → return undefined
  * 2. Check for refreshed token header (set by middleware after token refresh) → return header value
  * 3. Fall back to cookie value
+ *
+ * The middleware strips client-sent copies of these headers. On a route it does
+ * not run on, a client can only send a token it already holds.
  */
 export async function getAuthToken(): Promise<string | undefined> {
   const hdrs = await headers();

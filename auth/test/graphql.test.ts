@@ -49,8 +49,57 @@ describe("graphqlRequest", () => {
 
     const response = await request();
 
-    expect(response).toEqual(envelope);
-    expect(extractHttpStatus(response.errors)).toBeNull();
+    expect(response.data).toBeNull();
+    expect(response.errors).toEqual([
+      {
+        message: "OAuth grant was revoked",
+        extensions: { code: "UNAUTHENTICATED", referenceId: "abc", httpStatus: 401 },
+      },
+    ]);
+  });
+
+  // What the API answers for a refresh token it cannot decode.
+  it("treats a 401 envelope as unauthorized whatever its code", async () => {
+    fetchMock.mockResolvedValue(
+      respond(
+        401,
+        JSON.stringify({
+          data: null,
+          errors: [
+            { message: "JWT decoding failed", extensions: { code: "INTERNAL_SERVER_ERROR" } },
+          ],
+        }),
+      ),
+    );
+
+    const response = await request();
+
+    expect(extractHttpStatus(response.errors)).toBe(401);
+    expect(isUnauthorizedError(response)).toBe(true);
+  });
+
+  it("does not treat a 503 envelope as an auth failure", async () => {
+    fetchMock.mockResolvedValue(
+      respond(
+        503,
+        JSON.stringify({
+          errors: [{ message: "Service unavailable", extensions: { code: "INTERNAL_SERVER_ERROR" } }],
+        }),
+      ),
+    );
+
+    const response = await request();
+
+    expect(extractHttpStatus(response.errors)).toBe(503);
+    expect(isUnauthorizedError(response)).toBe(false);
+  });
+
+  it("leaves errors on a 2xx without a status", async () => {
+    fetchMock.mockResolvedValue(
+      respond(200, JSON.stringify({ data: null, errors: [{ message: "nope" }] })),
+    );
+
+    expect(extractHttpStatus((await request()).errors)).toBeNull();
   });
 
   // A proxy's HTML error page used to escape as `SyntaxError: Unexpected token '<'`.

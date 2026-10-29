@@ -115,7 +115,7 @@ export class PyloError extends Error {
    * on this rather than on `message`, which is human-facing and unstable.
    */
   code: PyloErrorCode | string | null;
-  /** Set only when the SDK synthesized the error from the HTTP status. */
+  /** The HTTP status of a non-2xx response; null when the API answered 2xx. */
   httpStatus: number | null;
   graphqlErrors: GraphQLError[] | CustomGraphQLError | undefined;
 

@@ -18,6 +18,10 @@ import {
   clearAuthCookiesOnResponse,
   getAuthTokenCookieName,
   getRefreshTokenCookieName,
+  stripInternalHeaders,
+  AUTH_FAILED_HEADER,
+  AUTH_TOKEN_HEADER,
+  AUTH_REFRESH_FAILED_HEADER,
 } from "./cookies.js";
 
 /**
@@ -72,7 +76,7 @@ export function createPyloProxy(options?: PyloAuthOptions) {
     // Check if this is a public path - skip auth entirely
     const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
     if (isPublicPath) {
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: stripInternalHeaders(request.headers) } });
     }
 
     // Run auth check
@@ -134,8 +138,7 @@ export async function pyloAuth(
   const isApiRoute = isApiRouteRequest(request);
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
 
-  // Create request headers that we can modify to pass tokens to route handlers
-  const requestHeaders = new Headers(request.headers);
+  const requestHeaders = stripInternalHeaders(request.headers);
 
   // Create response object that we may modify
   let response = NextResponse.next({
@@ -197,7 +200,7 @@ export async function pyloAuth(
       clearAuthCookiesOnResponse(response);
 
       // Set a header to signal that auth failed (for Server Actions/API routes that pass through)
-      requestHeaders.set('x-pylo-auth-failed', 'true');
+      requestHeaders.set(AUTH_FAILED_HEADER, 'true');
       response = NextResponse.next({
         request: {
           headers: requestHeaders,
@@ -213,7 +216,7 @@ export async function pyloAuth(
       // backend blip (e.g. during a deploy). Treat the user as still
       // authenticated for this request; the (expired) access token is left in
       // place and a later request will refresh it once the backend is healthy.
-      requestHeaders.set('x-pylo-auth-refresh-failed', 'true');
+      requestHeaders.set(AUTH_REFRESH_FAILED_HEADER, 'true');
       response = NextResponse.next({
         request: {
           headers: requestHeaders,
@@ -246,7 +249,7 @@ export async function pyloAuth(
 
     // Also set a custom header with the refreshed auth token for API routes
     // (cookies() from next/headers reads original cookies, not middleware-modified ones)
-    requestHeaders.set('x-pylo-auth-token', refreshResult.authToken);
+    requestHeaders.set(AUTH_TOKEN_HEADER, refreshResult.authToken);
 
     // Recreate response with updated request cookies
     response = NextResponse.next({
