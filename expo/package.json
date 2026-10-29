@@ -1,6 +1,6 @@
 {
   "name": "@pylo/expo",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "Type-safe Expo and React Native SDK for Pylo",
   "type": "module",
   "bin": {

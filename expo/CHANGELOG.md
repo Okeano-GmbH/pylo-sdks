@@ -1,5 +1,14 @@
 # @pylo/expo
 
+## 0.11.3
+
+### Patch Changes
+
+- Updated dependencies [099bcd0]
+  - @pylo/auth@0.2.1
+  - @pylo/core@0.13.1
+  - @pylo/react@0.11.3
+
 ## 0.11.2
 
 ### Patch Changes
