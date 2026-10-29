@@ -2,6 +2,7 @@ import {
   graphqlRequest,
   DEFAULT_GRAPHQL_ENDPOINT,
   hasErrors,
+  isUnauthorizedError,
 } from "@pylo/auth";
 import { getAuthToken } from "@pylo/auth-nextjs/core";
 
@@ -68,6 +69,11 @@ export function createPyloApiRoute(options?: ApiRouteOptions) {
         body.variables,
         { ...authOptions, ...(hasHeaders ? { headers: mergedHeaders } : {}) },
       );
+
+      // The browser can only tell an ended session from an ordinary error by the status.
+      if (isUnauthorizedError(result)) {
+        return Response.json(result, { status: 401 });
+      }
 
       if (hasErrors(result)) {
         return Response.json(result, { status: 200 });
