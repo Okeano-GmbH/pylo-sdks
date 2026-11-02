@@ -114,3 +114,5 @@ jobs:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
         env:
           NPM_CONFIG_PROVENANCE: "true"
+          # npm only explains a rejected OIDC token exchange at this level; a bare E404 says nothing.
+          NPM_CONFIG_LOGLEVEL: verbose
