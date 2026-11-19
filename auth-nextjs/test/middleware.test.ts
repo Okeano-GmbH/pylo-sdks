@@ -112,6 +112,96 @@ describe("pyloAuth refresh", () => {
   });
 });
 
+describe("pyloAuth refreshed tokens", () => {
+  const refreshed = () =>
+    pyloAnswers(200, {
+      data: { refreshToken: { data: { auth_token: "fresh", refresh_token: "r2" } } },
+    });
+
+  const setsCookie = (response: Response, name: string, value: string) =>
+    response.headers.getSetCookie().some((c) => c.startsWith(`${name}=${value};`));
+
+  // A page may be served from a CDN cache, which drops the Set-Cookie of a pass-through
+  // response, so the new tokens go out on a redirect the middleware answers itself.
+  it("redirects a page read to the same URL with the new cookies", async () => {
+    refreshed();
+
+    const auth = await pyloAuth(
+      request("/dashboard?tab=open", { auth: jwt(now() - 60), refresh: "r1" }),
+    );
+
+    expect(auth.loggedIn).toBe(true);
+    expect(auth.response.status).toBe(307);
+    expect(auth.response.headers.get("location")).toBe("https://app.test/dashboard?tab=open");
+    expect(setsCookie(auth.response, AUTH_COOKIE, "fresh")).toBe(true);
+    expect(setsCookie(auth.response, REFRESH_COOKIE, "r2")).toBe(true);
+    expect(auth.response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("keeps the flight marker on an RSC prefetch", async () => {
+    refreshed();
+
+    const auth = await pyloAuth(
+      request("/dashboard?_rsc=abc12", {
+        auth: jwt(now() - 60),
+        refresh: "r1",
+        headers: { rsc: "1", "next-router-prefetch": "1" },
+      }),
+    );
+
+    expect(auth.response.status).toBe(307);
+    expect(auth.response.headers.get("location")).toBe("https://app.test/dashboard?_rsc=abc12");
+  });
+
+  it("lets createPyloProxy return the redirect", async () => {
+    refreshed();
+
+    const response = await createPyloProxy()(
+      request("/dashboard", { auth: jwt(now() - 60), refresh: "r1" }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(setsCookie(response, REFRESH_COOKIE, "r2")).toBe(true);
+  });
+
+  it("passes an API route through with the new token", async () => {
+    refreshed();
+
+    const auth = await pyloAuth(
+      request("/api/graphql", { auth: jwt(now() - 60), refresh: "r1" }),
+    );
+
+    expect(auth.response.headers.get("location")).toBeNull();
+    expect(forwarded(auth.response, "x-pylo-auth-token")).toBe("fresh");
+    expect(setsCookie(auth.response, REFRESH_COOKIE, "r2")).toBe(true);
+  });
+
+  it("passes a Server Action through with the new token", async () => {
+    refreshed();
+
+    const auth = await pyloAuth(
+      new NextRequest("https://app.test/dashboard", {
+        method: "POST",
+        headers: {
+          "next-action": "abc",
+          cookie: `${AUTH_COOKIE}=${jwt(now() - 60)}; ${REFRESH_COOKIE}=r1`,
+        },
+      }),
+    );
+
+    expect(auth.response.headers.get("location")).toBeNull();
+    expect(forwarded(auth.response, "x-pylo-auth-token")).toBe("fresh");
+  });
+
+  it("does not redirect a page read with a valid token", async () => {
+    const auth = await pyloAuth(request("/dashboard", { auth: jwt(now() + 3600) }));
+
+    expect(auth.loggedIn).toBe(true);
+    expect(auth.response.headers.get("location")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("internal headers", () => {
   const forged = {
     "x-pylo-auth-token": "attacker-token",
@@ -144,7 +234,7 @@ describe("internal headers", () => {
     });
 
     const auth = await pyloAuth(
-      request("/dashboard", { auth: jwt(now() - 60), refresh: "r1", headers: forged }),
+      request("/api/graphql", { auth: jwt(now() - 60), refresh: "r1", headers: forged }),
     );
 
     expect(forwarded(auth.response, "x-pylo-auth-token")).toBe("fresh");
