@@ -51,6 +51,14 @@ function isApiRouteRequest(request: NextRequest): boolean {
 }
 
 /**
+ * Detect a page read: a document, RSC navigation or prefetch request.
+ * Server Actions are POSTs, so they never count.
+ */
+function isPageRead(request: NextRequest): boolean {
+  return (request.method === 'GET' || request.method === 'HEAD') && !isApiRouteRequest(request);
+}
+
+/**
  * Full middleware handler that protects routes and handles auth automatically.
  * This is the simplest way to add auth to your Next.js app.
  *
@@ -227,6 +235,20 @@ export async function pyloAuth(
   } else if (authToken && !isExpired) {
     // Valid token exists
     loggedIn = true;
+  }
+
+  // A page read may be answered from a CDN cache (a prerendered page or a segment
+  // prefetch on Vercel), and the Set-Cookie added to NextResponse.next() then never
+  // reaches the browser. The browser keeps sending the rotated refresh token, and once
+  // the API's grace period has passed it takes that for a replay and ends the session.
+  // A redirect to the same URL is answered by the middleware itself, so its cookies
+  // always arrive, and the repeated request carries the new tokens.
+  if (refreshResult?.status === "refreshed" && isPageRead(request)) {
+    response = NextResponse.redirect(request.nextUrl.clone(), 307);
+    // the redirect carries this user's tokens, so no CDN or proxy in front may store it
+    response.headers.set('Cache-Control', 'private, no-store');
+    setAuthCookiesOnResponse(response, refreshResult.authToken, refreshResult.refreshToken, cookieOptions);
+    return { user, loggedIn, redirect: createRedirect(response), redirectToLogin, response, isServerAction, isApiRoute };
   }
 
   // If we refreshed, update the request cookies so route handlers see the new tokens
